@@ -1221,6 +1221,21 @@ function App() {
     });
   }
 
+  function updateMessagePartCollapsed(messageId, partIndex, collapsed) {
+    setMessages((prev) => prev.map((message) => {
+      if (message.id !== messageId) return message;
+      const parts = normalizeStructuredParts(message.parts, message.content);
+      if (!parts[partIndex] || parts[partIndex].type !== 'thinking') return message;
+      const nextParts = parts.map((part, index) => (
+        index === partIndex ? { ...part, collapsed } : part
+      ));
+      return syncMessageContent({
+        ...message,
+        parts: nextParts
+      });
+    }));
+  }
+
   function sendText() {
     const content = input.trim();
     if (!content && attachments.length === 0) {
@@ -1407,6 +1422,7 @@ function App() {
             settings={settings}
             typingSpeed={settings.typingSpeed}
             onMessageMenu={setMessageMenu}
+            onThinkingCollapsedChange={updateMessagePartCollapsed}
           />
         )}
         {tab === 'dash' && (
@@ -1577,7 +1593,8 @@ function ChatTab({
   removeAttachment,
   fileInputRef,
   settings,
-  onMessageMenu
+  onMessageMenu,
+  onThinkingCollapsedChange
 }) {
   const timeline = useMemo(() => buildChatTimeline(messages), [messages]);
   return (
@@ -1597,10 +1614,13 @@ function ChatTab({
             <Message
               key={item.id}
               message={item.message}
+              part={item.part}
+              partIndex={item.partIndex}
               showTime={item.showTime}
               approveMcpTool={approveMcpTool}
               onMessageMenu={onMessageMenu}
               settings={settings}
+              onThinkingCollapsedChange={onThinkingCollapsedChange}
             />
           );
         })}
@@ -1731,9 +1751,19 @@ function MessageAttachments({ attachments = [], settings }) {
   );
 }
 
-function Message({ message, showTime, approveMcpTool, onMessageMenu, settings }) {
+function Message({
+  message,
+  part,
+  partIndex,
+  showTime,
+  approveMcpTool,
+  onMessageMenu,
+  settings,
+  onThinkingCollapsedChange
+}) {
   const pressTimer = useRef(null);
   const canOpenMenu = message.type === 'user' || message.type === 'assistant';
+  const effectiveType = part?.type || message.type;
   function startPress(event) {
     if (!canOpenMenu || !onMessageMenu) return;
     clearTimeout(pressTimer.current);
@@ -1745,7 +1775,7 @@ function Message({ message, showTime, approveMcpTool, onMessageMenu, settings })
     event.currentTarget?.classList.remove('pressing');
   }
 
-  if (message.type === 'typing_indicator') {
+  if (effectiveType === 'typing_indicator') {
     return (
       <div className="msg from-theo typing-row" aria-label="Theo is typing">
         <div className="body typing-bubble">
@@ -1756,13 +1786,22 @@ function Message({ message, showTime, approveMcpTool, onMessageMenu, settings })
       </div>
     );
   }
-  if (message.type === 'thinking') {
-    return <ThinkingBlock message={message} />;
+  if (effectiveType === 'thinking') {
+    return (
+      <ThinkingBlock
+        message={part?.content ? { ...message, content: part.content } : message}
+        part={part}
+        collapsed={typeof part?.collapsed === 'boolean' ? part.collapsed : undefined}
+        onCollapsedChange={typeof partIndex === 'number'
+          ? (collapsed) => onThinkingCollapsedChange?.(message.id, partIndex, collapsed)
+          : undefined}
+      />
+    );
   }
-  if (message.type === 'mcp_approval') {
+  if (effectiveType === 'mcp_approval') {
     return <McpApprovalCard message={message} approveMcpTool={approveMcpTool} />;
   }
-  if (message.type === 'tool_use') {
+  if (effectiveType === 'tool' || message.type === 'tool_use') {
     return (
       <details className="tool-call">
         <summary><MemoryStick size={16} /> tool · {message.content}<ChevronDown size={16} /></summary>
@@ -1770,7 +1809,7 @@ function Message({ message, showTime, approveMcpTool, onMessageMenu, settings })
       </details>
     );
   }
-  if (message.type === 'audio') {
+  if (effectiveType === 'audio') {
     return (
       <div className="msg from-theo audio-row">
         <div className="body">
@@ -1784,6 +1823,10 @@ function Message({ message, showTime, approveMcpTool, onMessageMenu, settings })
     );
   }
   const cls = message.type === 'user' ? 'msg from-me' : 'msg from-theo';
+  const content = part?.type === 'text' ? part.content : message.content;
+  const attachments = typeof partIndex === 'number' && partIndex > 0
+    ? []
+    : (message.attachments || message.meta?.attachments || []);
   return (
     <div
       className={cls}
@@ -1799,8 +1842,8 @@ function Message({ message, showTime, approveMcpTool, onMessageMenu, settings })
     >
       {message.meta?.keepalive && <div className="message-kicker">Théo · 主动</div>}
       <div className="body">
-        <MessageContent content={message.content} />
-        <MessageAttachments attachments={message.attachments || message.meta?.attachments || []} settings={settings} />
+        <MessageContent content={content} />
+        <MessageAttachments attachments={attachments} settings={settings} />
       </div>
       {showTime && <div className="meta">{formatClock(message.ts)}</div>}
     </div>
@@ -1945,17 +1988,28 @@ function EditMessageSheet({ message, close, onSave }) {
   );
 }
 
-function ThinkingBlock({ message }) {
-  const [open, setOpen] = useState(false);
-  const placeholder = Boolean(message.meta?.placeholder || message.meta?.hidden || !message.content);
+function ThinkingBlock({ message, part, collapsed, onCollapsedChange }) {
+  const [openState, setOpenState] = useState(false);
+  const placeholder = Boolean(message.meta?.placeholder || message.meta?.hidden || !(part?.content || message.content));
+  const isControlled = typeof collapsed === 'boolean';
+  const open = isControlled ? !collapsed : openState;
+
+  function toggle() {
+    const nextOpen = !open;
+    if (isControlled) {
+      onCollapsedChange?.(!nextOpen);
+      return;
+    }
+    setOpenState(nextOpen);
+  }
   const label = open ? '收起' : placeholder ? 'Théo 在想...' : '展开';
   return (
     <div className={open ? 'thinking-block open' : 'thinking-block'}>
       <button
         className="thinking-toggle"
         type="button"
-        onClick={() => setOpen((value) => !value)}
-        onDoubleClick={() => setOpen((value) => !value)}
+        onClick={toggle}
+        onDoubleClick={toggle}
       >
         <span>THINKING</span>
         <em>{label}</em>
