@@ -962,6 +962,7 @@ function App() {
   const typewriterRef = useRef({ queue: [], running: false, runId: 0 });
   const cacheSaveTimerRef = useRef(null);
   const historyFallbackTimersRef = useRef([]);
+  const skipNextAutoScrollRef = useRef(false);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -1229,6 +1230,10 @@ function App() {
   }, [settings.serverUrl, settings.token, settings.sessionId, activeConversationId, settings.showThinking]);
 
   useEffect(() => {
+    if (skipNextAutoScrollRef.current) {
+      skipNextAutoScrollRef.current = false;
+      return;
+    }
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, tab]);
 
@@ -1411,6 +1416,7 @@ function App() {
   }
 
   function updateMessagePartCollapsed(messageId, partIndex, collapsed) {
+    skipNextAutoScrollRef.current = true;
     setMessages((prev) => prev.map((message) => {
       if (message.id !== messageId) return message;
       const parts = normalizeStructuredParts(message.parts, message.content);
