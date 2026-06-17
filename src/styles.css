@@ -2390,8 +2390,8 @@ body {
   height: calc(var(--tabbar-height) + var(--safe-bottom));
   padding: 8px 14px calc(8px + var(--safe-bottom));
   gap: 4px;
-  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
-  border-top: 1px solid var(--line);
+  border-radius: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
   box-shadow: none;
 }
 
@@ -2624,21 +2624,31 @@ body {
 .memory-search {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 12px;
-  padding: 12px 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
   margin-top: 0;
   border-radius: 0;
 }
 
 .memory-search input {
-  padding: 0;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 10px;
   color: var(--ink);
-  border-radius: 0;
+  border-radius: var(--radius-control);
   background: transparent;
 }
 
+.memory-search button,
 .breath-button {
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
   color: var(--accent);
   background: transparent;
   font-size: 11px;
