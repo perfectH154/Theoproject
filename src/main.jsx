@@ -752,7 +752,19 @@ function normalizeHistoryMessage(row, options = {}, cachedMessagesByKey = new Ma
     parts: row.content ? [createTextPart(row.content)] : []
   });
 
-  let parts = normalizeStructuredParts(normalized.parts, normalized.content);
+  const serverPartsSource = Array.isArray(row.parts)
+    ? row.parts
+    : (Array.isArray(row.meta?.parts) ? row.meta.parts : null);
+  let parts = serverPartsSource
+    ? normalizeStructuredParts(serverPartsSource, row.content)
+    : normalizeStructuredParts(normalized.parts, normalized.content);
+  if (serverPartsSource) {
+    return createStructuredMessage(normalized, {
+      parts,
+      meta: { ...(normalized.meta || {}), db_id: row.id }
+    });
+  }
+
   if (options.showThinking && roleType === 'assistant' && Array.isArray(row.meta?.thinking)) {
     const thinking = row.meta.thinking
       .filter((item) => item && item !== 'Theo is thinking...')
