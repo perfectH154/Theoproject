@@ -1,0 +1,27 @@
+[Unit]
+Description=Ombre Brain MCP memory server
+Documentation=https://github.com/OWNER/ombre-brain
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/companion/ombre-brain.env
+User=companion
+Group=companion
+WorkingDirectory=/opt/companion/ombre-brain/app
+ExecStart=/usr/bin/env bash -lc 'mkdir -p "$OMBRE_DATA_DIR" "$OMBRE_LOG_DIR"; cd "$OMBRE_APP_DIR"; exec bash -lc "$OMBRE_START_CMD"'
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+
+# 基础加固：允许写入数据目录和日志目录，避免服务意外写系统其他位置。
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/companion/ombre-brain /var/log/companion /opt/companion/ombre-brain/app
+
+[Install]
+WantedBy=multi-user.target

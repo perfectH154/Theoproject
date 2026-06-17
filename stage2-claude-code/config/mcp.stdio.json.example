@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ombre-brain": {
+      "type": "stdio",
+      "command": "${OMBRE_STDIO_COMMAND:-npm}",
+      "args": ["${OMBRE_STDIO_ARGS:-start}"],
+      "env": {
+        "OMBRE_DATA_DIR": "${OMBRE_DATA_DIR:-/var/lib/companion/ombre-brain}"
+      },
+      "timeout": 120000
+    }
+  }
+}

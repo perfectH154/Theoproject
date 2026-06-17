@@ -1,0 +1,22 @@
+[Unit]
+Description=Companion Bridge v2 channel service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/companion/bridge-v2
+EnvironmentFile=/etc/companion/bridge-v2.env
+ExecStart=/usr/bin/node /opt/companion/bridge-v2/src/server.js
+Restart=always
+RestartSec=5
+MemoryMax=1200M
+CPUQuota=90%
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/var/lib/companion /opt/companion/bridge-v2 /opt/companion/claude /root/.claude /tmp
+
+[Install]
+WantedBy=multi-user.target

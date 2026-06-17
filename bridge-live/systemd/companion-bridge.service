@@ -1,0 +1,26 @@
+[Unit]
+Description=Companion Bridge service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/companion/bridge
+EnvironmentFile=/etc/companion/bridge.env
+ExecStart=/usr/bin/node /opt/companion/bridge/src/server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+
+# Stage 3 先按 root 跑 Claude Code，以复用 Stage 2 的登录态。Stage 6 会拆成专门用户并进一步加固。
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/var/lib/companion /opt/companion/bridge /opt/companion/claude /root/.claude
+
+[Install]
+WantedBy=multi-user.target

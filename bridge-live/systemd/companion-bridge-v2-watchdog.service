@@ -1,0 +1,7 @@
+[Unit]
+Description=Companion Bridge v2 watchdog
+
+[Service]
+Type=oneshot
+Environment=BRIDGE_V2_HEALTH_URL=http://127.0.0.1:3001/healthz
+ExecStart=/opt/companion/bridge-v2/scripts/watchdog.sh

@@ -1,0 +1,29 @@
+{
+  "name": "companion-bridge",
+  "version": "0.3.0",
+  "description": "Bridge service for the personal AI companion PWA and Claude Code.",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "node --check src/server.js && node --check src/config.js && node --check src/db.js && node --check src/security.js && node --check src/services/claudePty.js && node --check src/services/claudeParser.js && node --check src/services/channelPorts.js && node --check src/channel/companion-channel.mjs && node --check src/services/media.js && node --check src/services/stt.js && node --check src/services/tts.js && node --check src/services/mcpHttp.js && node --check src/services/mcpApproval.js && node --check src/services/dash.js && node --check src/routes/api.js && node --check src/websocket.js",
+    "token": "node scripts/generate_token.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.13.3",
+    "better-sqlite3": "^11.9.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mammoth": "^1.12.0",
+    "mime-types": "^2.1.35",
+    "multer": "^2.2.0",
+    "node-pty": "^1.0.0",
+    "pdf-parse": "^2.4.5",
+    "web-push": "^3.6.7",
+    "ws": "^8.18.0",
+    "zod": "^3.25.67"
+  }
+}

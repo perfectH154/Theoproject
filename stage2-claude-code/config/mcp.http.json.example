@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ombre-brain": {
+      "type": "http",
+      "url": "${OMBRE_MCP_HTTP_URL:-http://127.0.0.1:8765/mcp}",
+      "timeout": 120000
+    }
+  }
+}

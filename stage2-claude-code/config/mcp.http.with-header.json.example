@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ombre-brain": {
+      "type": "http",
+      "url": "${OMBRE_MCP_HTTP_URL:-http://127.0.0.1:8765/mcp}",
+      "headers": {
+        "${OMBRE_MCP_AUTH_HEADER_NAME}": "${OMBRE_MCP_AUTH_HEADER_VALUE}"
+      },
+      "timeout": 120000
+    }
+  }
+}
