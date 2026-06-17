@@ -425,6 +425,45 @@ function messageStorageKey(message) {
   return `id:${message?.id || nowId()}`;
 }
 
+function debugPartsEnabled() {
+  try {
+    const search = new URLSearchParams(window.location.search || '');
+    if (search.get('debugParts') === '1') return true;
+    return window.localStorage.getItem('THEO_DEBUG_PARTS') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function debugCacheScopeKey(sessionId, conversationId) {
+  return `${sessionId || 'default'}::${conversationId || 'default'}`;
+}
+
+function readDebugCacheScope(sessionId, conversationId) {
+  try {
+    const cache = JSON.parse(window.localStorage.getItem('theo-chat-cache-v2') || '{}');
+    return cache[debugCacheScopeKey(sessionId, conversationId)] || null;
+  } catch {
+    return null;
+  }
+}
+
+function summarizeDebugMessage(message) {
+  const parts = normalizeStructuredParts(message?.parts, message?.content);
+  const thinkingParts = parts.filter((part) => part.type === 'thinking');
+  return {
+    role: deriveMessageRole(message),
+    id: String(message?.id || ''),
+    dbId: message?.meta?.db_id || '',
+    contentLength: String(message?.content || '').length,
+    partsLength: parts.length,
+    partTypes: parts.map((part) => part.type),
+    hasNonTextPart: parts.some((part) => part.type !== 'text'),
+    thinkingLength: thinkingParts.reduce((sum, part) => sum + String(part.content || '').length, 0),
+    thinkingCollapsed: thinkingParts.map((part) => String(Boolean(part.collapsed))).join(',')
+  };
+}
+
 function findCachedMessageForHistoryRow(row, cachedMessagesByKey = new Map(), cachedMessages = [], usedCacheKeys = new Set()) {
   const exactKey = `db:${row.id}`;
   const exact = cachedMessagesByKey.get(exactKey);
@@ -835,6 +874,127 @@ function sanitizeMessagesForCache(messages) {
     .map((message) => toStoredMessage(message));
 }
 
+function DebugPartsPanel({
+  enabled,
+  sessionId,
+  conversationId,
+  messages,
+  historyDebug,
+  saveDebug
+}) {
+  const [open, setOpen] = useState(true);
+  const scopeKey = debugCacheScopeKey(sessionId, conversationId);
+  const cacheScope = useMemo(() => readDebugCacheScope(sessionId, conversationId), [sessionId, conversationId, messages, historyDebug, saveDebug]);
+  const memorySummaries = useMemo(
+    () => messages.slice(-5).map((message) => summarizeDebugMessage(message)),
+    [messages]
+  );
+  const cachedMessages = Array.isArray(cacheScope?.messages) ? cacheScope.messages : [];
+  const cachedSummaries = cachedMessages.slice(-5).map((message) => summarizeDebugMessage(message));
+
+  if (!enabled) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      right: 12,
+      bottom: 98,
+      width: 'min(360px, calc(100vw - 24px))',
+      maxHeight: '55dvh',
+      overflow: 'auto',
+      zIndex: 9999,
+      background: 'rgba(255,255,255,0.96)',
+      border: '1px solid rgba(120,90,100,0.18)',
+      boxShadow: '0 12px 32px rgba(30,20,25,0.16)',
+      borderRadius: 14,
+      padding: 12,
+      fontSize: 12,
+      lineHeight: 1.45,
+      color: '#3f3136',
+      backdropFilter: 'blur(14px)'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <strong>parts debug</strong>
+        <button type="button" onClick={() => setOpen((value) => !value)} style={{ border: 0, background: 'transparent', color: '#b86b81', fontWeight: 600 }}>
+          {open ? '收起' : '展开'}
+        </button>
+      </div>
+      {open && (
+        <>
+          <section style={{ marginBottom: 10 }}>
+            <div><strong>sessionId:</strong> {sessionId}</div>
+            <div><strong>conversationId:</strong> {conversationId}</div>
+            <div><strong>cacheKey:</strong> {scopeKey}</div>
+            <div><strong>messages.length:</strong> {messages.length}</div>
+          </section>
+
+          <section style={{ marginBottom: 10 }}>
+            <strong>memory messages</strong>
+            {memorySummaries.length === 0 ? <div>none</div> : memorySummaries.map((item, index) => (
+              <div key={`${item.id}-${index}`} style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(120,90,100,0.12)' }}>
+                <div>{item.role} | {item.id}</div>
+                <div>db:{String(item.dbId || '-')}</div>
+                <div>content:{item.contentLength} | parts:{item.partsLength}</div>
+                <div>types:{item.partTypes.join(',') || '-'}</div>
+                <div>nonText:{String(item.hasNonTextPart)} | thinkingLen:{item.thinkingLength}</div>
+                <div>thinkingCollapsed:{item.thinkingCollapsed || '-'}</div>
+              </div>
+            ))}
+          </section>
+
+          <section style={{ marginBottom: 10 }}>
+            <strong>localStorage cache</strong>
+            <div>exists: {String(Boolean(cacheScope))}</div>
+            <div>cached messages: {cachedMessages.length}</div>
+            {cachedSummaries.length === 0 ? <div>none</div> : cachedSummaries.map((item, index) => (
+              <div key={`${item.id}-${index}`} style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(120,90,100,0.12)' }}>
+                <div>{item.role} | {item.id}</div>
+                <div>db:{String(item.dbId || '-')}</div>
+                <div>content:{item.contentLength} | parts:{item.partsLength}</div>
+                <div>types:{item.partTypes.join(',') || '-'}</div>
+                <div>thinkingLen:{item.thinkingLength}</div>
+              </div>
+            ))}
+          </section>
+
+          <section style={{ marginBottom: 10 }}>
+            <strong>history merge</strong>
+            {historyDebug ? (
+              <>
+                <div>rows:{historyDebug.rowCount} | exact:{historyDebug.exactHits} | fallback:{historyDebug.fallbackHits} | miss:{historyDebug.missCount}</div>
+                {(historyDebug.rows || []).slice(-8).map((row, index) => (
+                  <div key={`${row.rowId}-${index}`} style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(120,90,100,0.12)' }}>
+                    <div>row:{row.rowId} | len:{row.contentLength}</div>
+                    <div>match:{row.matchType} | key:{row.matchedCacheKey || '-'}</div>
+                    <div>parts:{row.matchedPartsLength} | types:{(row.matchedPartTypes || []).join(',') || '-'}</div>
+                  </div>
+                ))}
+              </>
+            ) : <div>no history merge yet</div>}
+          </section>
+
+          <section>
+            <strong>last save</strong>
+            {saveDebug ? (
+              <>
+                <div>at:{new Date(saveDebug.at).toLocaleTimeString()}</div>
+                <div>messages:{saveDebug.messageCount} | withParts:{saveDebug.withPartsCount} | withThinking:{saveDebug.withThinkingCount}</div>
+                {saveDebug.lastAssistant && (
+                  <>
+                    <div>assistant content:{saveDebug.lastAssistant.contentLength}</div>
+                    <div>assistant parts:{saveDebug.lastAssistant.partsLength}</div>
+                    <div>assistant types:{saveDebug.lastAssistant.partTypes.join(',') || '-'}</div>
+                  </>
+                )}
+              </>
+            ) : <div>no save yet</div>}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [settings, setSettings] = useState(loadSettings);
   const [tab, setTab] = useState('chat');
@@ -857,6 +1017,9 @@ function App() {
   const attachmentsRef = useRef(attachments);
   const typewriterRef = useRef({ queue: [], running: false, runId: 0 });
   const cacheSaveTimerRef = useRef(null);
+  const debugParts = useMemo(() => debugPartsEnabled(), []);
+  const [historyDebug, setHistoryDebug] = useState(null);
+  const [saveDebug, setSaveDebug] = useState(null);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -882,10 +1045,23 @@ function App() {
   useEffect(() => {
     clearTimeout(cacheSaveTimerRef.current);
     cacheSaveTimerRef.current = setTimeout(() => {
-      saveConversationMessages(settings.sessionId, activeConversationId, sanitizeMessagesForCache(messages));
+      const sanitized = sanitizeMessagesForCache(messages);
+      if (debugParts) {
+        const withPartsCount = sanitized.filter((message) => Array.isArray(message.parts) && message.parts.length > 0).length;
+        const withThinkingCount = sanitized.filter((message) => Array.isArray(message.parts) && message.parts.some((part) => part.type === 'thinking')).length;
+        const lastAssistant = [...sanitized].reverse().find((message) => deriveMessageRole(message) === 'assistant');
+        setSaveDebug({
+          at: Date.now(),
+          messageCount: sanitized.length,
+          withPartsCount,
+          withThinkingCount,
+          lastAssistant: lastAssistant ? summarizeDebugMessage(lastAssistant) : null
+        });
+      }
+      saveConversationMessages(settings.sessionId, activeConversationId, sanitized);
     }, 180);
     return () => clearTimeout(cacheSaveTimerRef.current);
-  }, [messages, settings.sessionId, activeConversationId]);
+  }, [messages, settings.sessionId, activeConversationId, debugParts]);
 
   function clearTypewriterQueue() {
     typewriterRef.current.queue = [];
@@ -1059,6 +1235,32 @@ function App() {
           const cachedMessages = loadConversationMessages(settings.sessionId, activeConversationId);
           const cachedMap = new Map(cachedMessages.map((message) => [messageStorageKey(message), message]));
           const usedCacheKeys = new Set();
+          if (debugParts) {
+            const debugUsedCacheKeys = new Set();
+            const rows = history
+              .filter((row) => (row.role === 'user' ? 'user' : 'assistant') === 'assistant')
+              .map((row) => {
+                const match = findCachedMessageForHistoryRow(row, cachedMap, cachedMessages, debugUsedCacheKeys);
+                if (match?.key) debugUsedCacheKeys.add(match.key);
+                const parts = normalizeStructuredParts(match?.message?.parts, match?.message?.content);
+                const matchType = !match ? 'none' : match.key === `db:${row.id}` ? 'exact' : 'fallback';
+                return {
+                  rowId: row.id,
+                  contentLength: String(row.content || '').length,
+                  matchedCacheKey: match?.key || '',
+                  matchType,
+                  matchedPartsLength: parts.length,
+                  matchedPartTypes: parts.map((part) => part.type)
+                };
+              });
+            setHistoryDebug({
+              rowCount: history.length,
+              exactHits: rows.filter((row) => row.matchType === 'exact').length,
+              fallbackHits: rows.filter((row) => row.matchType === 'fallback').length,
+              missCount: rows.filter((row) => row.matchType === 'none').length,
+              rows
+            });
+          }
           clearTypewriterQueue();
           setMessages(history.map((message) => normalizeHistoryMessage(
             message,
@@ -1525,6 +1727,14 @@ function App() {
           onSave={saveEditedMessage}
         />
       )}
+      <DebugPartsPanel
+        enabled={debugParts}
+        sessionId={settings.sessionId}
+        conversationId={activeConversationId}
+        messages={messages}
+        historyDebug={historyDebug}
+        saveDebug={saveDebug}
+      />
     </div>
   );
 }
