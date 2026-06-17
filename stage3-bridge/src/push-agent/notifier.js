@@ -9,7 +9,7 @@ function configureWebPush() {
   return true;
 }
 
-async function notifyAll(text) {
+async function pushToAll(payload) {
   if (!configureWebPush()) {
     throw new Error('VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY 未配置');
   }
@@ -21,11 +21,7 @@ async function notifyAll(text) {
       await webpush.sendNotification({
         endpoint: sub.endpoint,
         keys: { p256dh: sub.p256dh, auth: sub.auth }
-      }, JSON.stringify({
-        title: 'Théo',
-        body: text.slice(0, 120),
-        url: '/chat/'
-      }));
+      }, JSON.stringify(payload));
       markPushOk(sub.id);
       ok += 1;
     } catch (error) {
@@ -37,4 +33,23 @@ async function notifyAll(text) {
   return { ok, fail, total: subs.length };
 }
 
-module.exports = { configureWebPush, notifyAll };
+async function notifyAll(text) {
+  return pushToAll({
+    title: 'Théo',
+    body: String(text || '').slice(0, 120),
+    url: '/chat/'
+  });
+}
+
+async function notifyMessage({ text, conversationId } = {}) {
+  const url = conversationId && conversationId !== 'default'
+    ? `/chat/?conversation=${encodeURIComponent(conversationId)}`
+    : '/chat/';
+  return pushToAll({
+    title: 'Théo',
+    body: String(text || '').slice(0, 120),
+    url
+  });
+}
+
+module.exports = { configureWebPush, notifyAll, notifyMessage };
