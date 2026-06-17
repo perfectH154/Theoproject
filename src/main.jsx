@@ -425,6 +425,43 @@ function messageStorageKey(message) {
   return `id:${message?.id || nowId()}`;
 }
 
+function findCachedMessageForHistoryRow(row, cachedMessagesByKey = new Map(), cachedMessages = [], usedCacheKeys = new Set()) {
+  const exactKey = `db:${row.id}`;
+  const exact = cachedMessagesByKey.get(exactKey);
+  if (exact && !usedCacheKeys.has(exactKey)) {
+    return { key: exactKey, message: exact };
+  }
+
+  const roleType = row.role === 'user' ? 'user' : 'assistant';
+  const rowText = String(row.content || '').trim().replace(/\s+/g, ' ');
+  if (!rowText) return null;
+
+  const candidates = cachedMessages.filter((message) => {
+    const key = messageStorageKey(message);
+    if (usedCacheKeys.has(key) || key === exactKey) return false;
+    if (deriveMessageRole(message) !== roleType) return false;
+
+    const parts = normalizeStructuredParts(message.parts, message.content);
+    if (!parts.length || !parts.some((part) => part.type !== 'text')) return false;
+
+    const cachedText = String(textContentFromParts(parts) || message.content || '').trim().replace(/\s+/g, ' ');
+    if (!cachedText || cachedText !== rowText) return false;
+
+    if (Number.isFinite(row.ts) && Number.isFinite(message.ts) && Math.abs(message.ts - row.ts) > 30 * 1000) {
+      return false;
+    }
+
+    return true;
+  });
+
+  if (candidates.length !== 1) return null;
+  const match = candidates[0];
+  return {
+    key: messageStorageKey(match),
+    message: match
+  };
+}
+
 function toStoredMessage(message) {
   const parts = normalizeStructuredParts(message.parts, message.content).map((part) => {
     if (part.type === 'thinking') {
@@ -632,7 +669,7 @@ function normalizeMessage(raw, options = {}) {
   });
 }
 
-function normalizeHistoryMessage(row, options = {}, cachedMessagesByKey = new Map()) {
+function normalizeHistoryMessage(row, options = {}, cachedMessagesByKey = new Map(), cachedMessages = [], usedCacheKeys = new Set()) {
   const roleType = row.role === 'user' ? 'user' : 'assistant';
   const normalized = normalizeMessage({
     id: `db-${row.id}`,
@@ -662,15 +699,17 @@ function normalizeHistoryMessage(row, options = {}, cachedMessagesByKey = new Ma
     }
   }
 
-  const cached = cachedMessagesByKey.get(`db:${row.id}`);
+  const cachedMatch = findCachedMessageForHistoryRow(row, cachedMessagesByKey, cachedMessages, usedCacheKeys);
+  const cached = cachedMatch?.message;
   if (cached?.parts?.length) {
     const cachedParts = normalizeStructuredParts(cached.parts, cached.content);
     const incomingText = textContentFromParts(parts).trim();
     const cachedText = textContentFromParts(cachedParts).trim();
     if (!incomingText || incomingText === cachedText) {
+      if (cachedMatch?.key) usedCacheKeys.add(cachedMatch.key);
       return createStructuredMessage(normalized, {
         parts: cachedParts,
-        content: cached.content || normalized.content
+        meta: { ...(normalized.meta || {}), db_id: row.id }
       });
     }
   }
@@ -1019,8 +1058,15 @@ function App() {
           const history = payload.meta.messages || [];
           const cachedMessages = loadConversationMessages(settings.sessionId, activeConversationId);
           const cachedMap = new Map(cachedMessages.map((message) => [messageStorageKey(message), message]));
+          const usedCacheKeys = new Set();
           clearTypewriterQueue();
-          setMessages(history.map((message) => normalizeHistoryMessage(message, { showThinking: settings.showThinking }, cachedMap)));
+          setMessages(history.map((message) => normalizeHistoryMessage(
+            message,
+            { showThinking: settings.showThinking },
+            cachedMap,
+            cachedMessages,
+            usedCacheKeys
+          )));
           return;
         }
         if (payload.type === 'typing_indicator') {
