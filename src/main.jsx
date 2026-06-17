@@ -194,7 +194,7 @@ function isBubbleLikeMessage(message) {
 function hasMeaningfulPartContent(part) {
   if (!part || typeof part !== 'object') return false;
   if (part.type === 'thinking') {
-    return Boolean(String(part.content || '').trim()) || Boolean(part.placeholder);
+    return Boolean(String(part.content || '').trim());
   }
   if (part.type === 'tool') {
     return Boolean(String(part.name || '').trim() || String(part.content || '').trim());
@@ -211,6 +211,37 @@ function isEmptyAssistantShell(message) {
   const parts = Array.isArray(message.parts) ? message.parts : [];
   const hasMeaningfulParts = parts.some((part) => hasMeaningfulPartContent(part));
   return !content && !hasMeaningfulParts;
+}
+
+function closeThinkingAndStopStreaming(message, reason = 'stopped') {
+  if (!message || deriveMessageRole(message) !== 'assistant') return message;
+  const next = closeOpenThinkingParts(message);
+  return createStructuredMessage(next, {
+    meta: {
+      ...(next.meta || {}),
+      streamingTurn: false,
+      typing: false,
+      pending: false,
+      stopped: reason === 'stopped' || reason === 'abort' || reason === 'timeout' || reason === 'network',
+      failed: reason === 'error' || reason === 'timeout' || reason === 'network',
+      stopReason: reason
+    }
+  });
+}
+
+function expireStaleStreamingMessages(messages, now = Date.now()) {
+  return messages
+    .map((message) => {
+      if (!message || deriveMessageRole(message) !== 'assistant') return message;
+      const age = now - Number(message.ts || message.meta?.startedAt || 0);
+      const hasOpenThinking = normalizeStructuredParts(message.parts, message.content)
+        .some((part) => part.type === 'thinking' && !part.endedAt);
+      if (age <= 2 * 60 * 1000 || (!message.meta?.streamingTurn && !message.meta?.typing && !hasOpenThinking)) {
+        return message;
+      }
+      return closeThinkingAndStopStreaming(message, 'stale');
+    })
+    .filter((message) => !isEmptyAssistantShell(message));
 }
 
 function buildTimelineEntries(message) {
@@ -953,6 +984,7 @@ function App() {
   const [messageMenu, setMessageMenu] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [error, setError] = useState('');
+  const [activeRequest, setActiveRequest] = useState(null);
   const wsRef = useRef(null);
   const listRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -963,6 +995,7 @@ function App() {
   const cacheSaveTimerRef = useRef(null);
   const historyFallbackTimersRef = useRef([]);
   const skipNextAutoScrollRef = useRef(false);
+  const activeRequestRef = useRef(null);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -985,7 +1018,7 @@ function App() {
     const cached = loadConversationMessages(settings.sessionId, activeConversationId);
     if (cached.length) {
       clearTypewriterQueue();
-      setMessages(cached.map((message) => restoreStoredMessage(message)));
+      setMessages(expireStaleStreamingMessages(cached.map((message) => restoreStoredMessage(message))));
     }
   }, [settings.sessionId, activeConversationId]);
 
@@ -1181,8 +1214,14 @@ function App() {
         setError('');
         refreshStatus();
       },
-      onClose: () => setConnected(false),
-      onError: () => setError('WebSocket 连接失败，正在自动重连'),
+      onClose: () => {
+        setConnected(false);
+        if (activeRequestRef.current) finishChatRequest('network');
+      },
+      onError: () => {
+        setError('WebSocket 连接失败，正在自动重连');
+        if (activeRequestRef.current) finishChatRequest('network');
+      },
       onMessage: (event) => {
         const payload = JSON.parse(event.data);
         if (payload.type === 'status' && payload.content === 'history') {
@@ -1197,6 +1236,13 @@ function App() {
         }
         if (payload.type === 'status') {
           if (payload.content === 'pong') return;
+          if (payload.content === 'done' || payload.content === 'assistant_message_saved') {
+            finishChatRequest('done');
+          }
+          if (payload.content === 'error' || payload.content === 'aborted' || payload.content === 'abort_ignored') {
+            finishChatRequest(payload.content === 'error' ? 'error' : 'abort');
+            if (payload.meta?.message) setError(payload.meta.message);
+          }
           if (payload.content === 'mcp_approval_required' || payload.meta?.approvalRequired) {
             const approvalMessage = normalizeMessage({
               id: nowId(),
@@ -1212,6 +1258,10 @@ function App() {
             return;
           }
           setStatus(payload);
+          return;
+        }
+        if (payload.type === 'thinking_complete') {
+          finishChatRequest(payload.meta?.error ? 'error' : payload.meta?.aborted ? 'abort' : 'done');
           return;
         }
         const normalized = normalizeMessage({ id: nowId(), ...payload, ts: Date.now() }, { showThinking: settings.showThinking });
@@ -1431,7 +1481,69 @@ function App() {
     }));
   }
 
+  function finishChatRequest(reason = 'done') {
+    const current = activeRequestRef.current;
+    if (current?.timeout) clearTimeout(current.timeout);
+    activeRequestRef.current = null;
+    setActiveRequest(null);
+    setMessages((prev) => prev
+      .map((message) => (
+        deriveMessageRole(message) === 'assistant' && message.meta?.streamingTurn
+          ? closeThinkingAndStopStreaming(message, reason)
+          : message
+      ))
+      .filter((message) => !isEmptyAssistantShell(message)));
+  }
+
+  function startChatRequest(requestId, conversationId) {
+    const previous = activeRequestRef.current;
+    if (previous?.timeout) clearTimeout(previous.timeout);
+    const controller = new AbortController();
+    const request = {
+      id: requestId,
+      conversationId,
+      controller,
+      timeout: setTimeout(() => controller.abort('timeout'), 120_000),
+      abortSent: false,
+      startedAt: Date.now()
+    };
+    controller.signal.addEventListener('abort', () => {
+      const reason = String(controller.signal.reason || 'abort');
+      if (!request.abortSent && wsRef.current?.isConnected()) {
+        wsRef.current.send({
+          type: 'abort',
+          content: reason,
+          meta: {
+            session_id: settingsRef.current.sessionId,
+            conversation_id: conversationId,
+            request_id: requestId,
+            reason
+          }
+        });
+        request.abortSent = true;
+      }
+      finishChatRequest(reason);
+    });
+    activeRequestRef.current = request;
+    setActiveRequest({ id: requestId, conversationId, startedAt: request.startedAt });
+    return request;
+  }
+
+  function stopActiveRequest(reason = 'stopped') {
+    const current = activeRequestRef.current;
+    if (!current) return;
+    if (current.controller && !current.controller.signal.aborted) {
+      current.controller.abort(reason);
+      return;
+    }
+    finishChatRequest(reason);
+  }
+
   function sendText() {
+    if (activeRequestRef.current) {
+      setError('Theo is still replying. Tap STOP first.');
+      return false;
+    }
     const content = input.trim();
     if (!content && attachments.length === 0) {
       setError('先写一句话再发送');
@@ -1451,14 +1563,23 @@ function App() {
       wsRef.current?.reconnect();
       return false;
     }
+    const requestId = `req-${nowId()}`;
+    startChatRequest(requestId, activeConversationId);
     const meta = {
       session_id: settings.sessionId,
       conversation_id: activeConversationId,
+      request_id: requestId,
       tts: settings.tts,
       model: settings.model || undefined,
       attachments: readyAttachments
     };
-    wsRef.current.send({ type: 'text', content, meta });
+    const sent = wsRef.current.send({ type: 'text', content, meta });
+    if (!sent) {
+      finishChatRequest('network');
+      setError('WebSocket send failed, reconnecting');
+      wsRef.current?.reconnect();
+      return false;
+    }
     scheduleSendHistoryFallback(activeConversationId);
     setMessages((prev) => [...prev, { id: nowId(), type: 'user', content: content || '[附件]', meta, attachments: readyAttachments, ts: Date.now() }]);
     setInput('');
@@ -1608,6 +1729,8 @@ function App() {
             input={input}
             setInput={setInput}
             sendText={sendText}
+            activeRequest={activeRequest}
+            stopActiveRequest={stopActiveRequest}
             connected={connected}
             error={error}
             approveMcpTool={approveMcpTool}
@@ -1781,6 +1904,8 @@ function ChatTab({
   input,
   setInput,
   sendText,
+  activeRequest,
+  stopActiveRequest,
   connected,
   error,
   approveMcpTool,
@@ -1871,14 +1996,18 @@ function ChatTab({
         />
         <button
           className="send-button text-button"
-          type="submit"
+          type={activeRequest ? 'button' : 'submit'}
           onPointerDown={(event) => {
             // iOS Safari 有时在 textarea 聚焦时第一下只处理焦点；pointerdown 让发送更可靠。
             event.preventDefault();
-            sendText();
+            if (activeRequest) {
+              stopActiveRequest('stopped');
+            } else {
+              sendText();
+            }
           }}
-          aria-label="发送"
-        >SEND</button>
+          aria-label={activeRequest ? '停止生成' : '发送'}
+        >{activeRequest ? 'STOP' : 'SEND'}</button>
       </form>
     </section>
   );
