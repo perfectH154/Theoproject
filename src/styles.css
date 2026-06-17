@@ -1,7 +1,7 @@
 
 :root {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Noto Sans SC", sans-serif;
-  color: #5F4B50;
+  color: #5C4033;
   background: #E3A6B6;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -10,25 +10,25 @@
   --page-overlay: rgba(255, 238, 245, 0.58);
   --page-gradient: linear-gradient(180deg, rgba(223, 164, 181, 0.82) 0%, rgba(249, 230, 236, 0.72) 38%, rgba(255, 247, 249, 0.78) 100%);
   --nav-bg: rgba(219, 159, 174, 0.38);
-  --nav-icon: #FFF7FA;
-  --title: #FFF8FA;
+  --nav-icon: #5C4033;
+  --title: #5C4033;
   --online: #91B88E;
   --user-bg: rgba(188, 104, 142, 0.72);
   --user-bg-active: rgba(176, 86, 128, 0.78);
-  --user-text: #FFF8FA;
-  --user-time: rgba(255, 245, 248, 0.68);
+  --user-text: #5C4033;
+  --user-time: rgba(184, 144, 154, 0.72);
   --assistant-bg: rgba(255, 250, 251, 0.76);
-  --assistant-text: #6A5558;
-  --assistant-time: rgba(106, 85, 88, 0.45);
+  --assistant-text: #5C4033;
+  --assistant-time: rgba(184, 144, 154, 0.58);
   --assistant-border: 1px solid rgba(255, 255, 255, 0.46);
   --thinking-bg: rgba(255, 250, 251, 0.48);
   --thinking-border: 1px dashed rgba(157, 123, 132, 0.34);
-  --thinking-title: rgba(133, 101, 110, 0.58);
-  --thinking-text: rgba(101, 82, 86, 0.62);
+  --thinking-title: rgba(184, 144, 154, 0.68);
+  --thinking-text: rgba(92, 64, 51, 0.68);
   --input-bg: rgba(255, 250, 251, 0.82);
   --input-border: 1px solid rgba(255, 255, 255, 0.55);
-  --placeholder: #A88D95;
-  --input-text: #5E4A4E;
+  --placeholder: #B8909A;
+  --input-text: #5C4033;
   --attach: #A87B8B;
   --send-bg: #E9C5D0;
   --send-hover: #DFAFBE;
@@ -38,10 +38,10 @@
   --tab-active-icon: #A35E78;
   --tab-active-text: #8E5870;
   --tab-icon: #9A7C86;
-  --tab-text: #8F747D;
-  --main-text: #5F4B50;
-  --sub-text: #8E747C;
-  --weak-text: #B1979F;
+  --tab-text: #B8909A;
+  --main-text: #5C4033;
+  --sub-text: #B8909A;
+  --weak-text: #B8909A;
   --white-text: #FFF8FA;
   --divider: rgba(160, 120, 132, 0.16);
   --safe-top: env(safe-area-inset-top, 0px);
@@ -222,7 +222,7 @@ button {
   left: 0;
   width: min(82vw, 330px);
   padding: calc(var(--safe-top) + 18px) 16px calc(var(--safe-bottom) + 24px);
-  color: #5F4B50;
+  color: #5C4033;
   background: rgba(255, 250, 251, 0.82);
   border-right: 1px solid rgba(255, 255, 255, 0.55);
   box-shadow: 16px 0 38px rgba(121, 82, 96, 0.16);
@@ -242,7 +242,7 @@ button {
 
 .conversation-head p {
   margin: 0 0 3px;
-  color: #B1979F;
+  color: #B8909A;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -251,7 +251,7 @@ button {
 
 .conversation-head h2 {
   margin: 0;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 24px;
   line-height: 1.1;
 }
@@ -302,20 +302,20 @@ button {
 }
 
 .conversation-item strong {
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 15px;
   line-height: 1.25;
 }
 
 .conversation-item small {
   margin-top: 4px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
 }
 
 .conversation-tip {
   margin: 16px 4px 0;
-  color: #B1979F;
+  color: #B8909A;
   font-size: 12px;
 }
 
@@ -329,7 +329,7 @@ button {
   gap: 8px;
   padding: 16px;
   border-radius: 24px;
-  color: #5F4B50;
+  color: #5C4033;
   background: rgba(255, 250, 251, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.55);
   box-shadow: 0 18px 42px rgba(121, 82, 96, 0.20);
@@ -426,7 +426,7 @@ button {
   background: rgba(255, 250, 251, 0.58);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  color: #6A5558;
+  color: #5C4033;
   box-shadow: 0 8px 24px rgba(120, 84, 96, 0.10);
 }
 
@@ -443,7 +443,7 @@ button {
 .chat-empty span {
   display: block;
   margin-top: 6px;
-  color: #8E747C;
+  color: #B8909A;
   line-height: 1.7;
 }
 
@@ -480,7 +480,7 @@ button {
 .bubble.assistant {
   max-width: 78%;
   margin-right: auto;
-  color: #6A5558;
+  color: #5C4033;
   background: rgba(255, 250, 251, 0.76);
   border: 1px solid rgba(255, 255, 255, 0.46);
   backdrop-filter: blur(16px);
@@ -526,7 +526,7 @@ button {
   max-height: 280px;
   margin: 0;
   padding: 10px;
-  color: #5F4B50;
+  color: #5C4033;
   background: transparent;
   white-space: pre;
   font-size: 12px;
@@ -558,7 +558,7 @@ button {
   align-items: center;
   gap: 7px;
   padding: 8px 9px;
-  color: #6A5558;
+  color: #5C4033;
   font-size: 13px;
 }
 
@@ -608,7 +608,7 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px;
-  color: #5F4B50;
+  color: #5C4033;
   border-bottom: 1px solid rgba(160, 120, 132, 0.16);
 }
 
@@ -811,7 +811,7 @@ button {
 
 .approval-card strong {
   display: block;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 15px;
 }
 
@@ -853,7 +853,7 @@ button {
   width: min(100%, 420px);
   padding: 16px;
   border-radius: 24px;
-  color: #5F4B50;
+  color: #5C4033;
   background: rgba(255, 250, 251, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(18px);
@@ -881,7 +881,7 @@ button {
 
 .message-menu button.danger {
   color: #FFF8FA;
-  background: #6A5558;
+  background: #5C4033;
 }
 
 .edit-message-sheet textarea {
@@ -890,7 +890,7 @@ button {
   resize: vertical;
   padding: 12px;
   border-radius: 16px;
-  color: #5E4A4E;
+  color: #5C4033;
   background: rgba(255, 250, 251, 0.72);
   border: 1px solid rgba(160, 120, 132, 0.16);
   outline: 0;
@@ -937,7 +937,7 @@ button {
   margin: 12px 0;
   padding: 12px 14px;
   border-radius: 18px;
-  color: #6A5558;
+  color: #5C4033;
   background: rgba(255, 250, 251, 0.70);
   border: 1px solid rgba(255, 255, 255, 0.46);
   backdrop-filter: blur(16px);
@@ -1005,7 +1005,7 @@ button {
   max-width: 224px;
   padding: 7px 8px;
   border-radius: 16px;
-  color: #6A5558;
+  color: #5C4033;
   background: rgba(255, 250, 251, 0.62);
   border: 1px solid rgba(255, 255, 255, 0.46);
   box-shadow: 0 6px 18px rgba(128, 82, 98, 0.08);
@@ -1075,14 +1075,14 @@ button {
   resize: none;
   border: 0;
   outline: 0;
-  color: #5E4A4E;
+  color: #5C4033;
   background: transparent;
   font-size: 16px;
   line-height: 1.45;
 }
 
 .composer textarea::placeholder {
-  color: #A88D95;
+  color: #B8909A;
 }
 
 .tabbar {
@@ -1172,7 +1172,7 @@ button {
   gap: 14px;
   padding: 16px;
   border-radius: 22px;
-  color: #5F4B50;
+  color: #5C4033;
 }
 
 .memory-hero {
@@ -1182,7 +1182,7 @@ button {
   gap: 14px;
   padding: 16px;
   border-radius: 22px;
-  color: #5F4B50;
+  color: #5C4033;
 }
 
 .dash-hero span,
@@ -1190,7 +1190,7 @@ button {
 .sheet-title span,
 .reader-top span {
   display: block;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
   letter-spacing: 0.10em;
   text-transform: uppercase;
@@ -1201,7 +1201,7 @@ button {
 .reader-top strong {
   display: block;
   margin-top: 4px;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 22px;
 }
 
@@ -1236,7 +1236,7 @@ button {
   margin-top: 14px;
   padding: 16px;
   border-radius: 22px;
-  color: #6A5558;
+  color: #5C4033;
   border: 1px solid rgba(255, 255, 255, 0.46);
   background: rgba(255, 250, 251, 0.74);
   backdrop-filter: blur(16px);
@@ -1248,7 +1248,7 @@ button {
 .dash-timer-main span,
 .dash-timer-sub span {
   display: block;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
   letter-spacing: 0.10em;
   text-transform: uppercase;
@@ -1257,7 +1257,7 @@ button {
 .dash-line-card strong {
   display: block;
   margin-top: 6px;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 18px;
   line-height: 1.6;
   font-weight: 600;
@@ -1268,7 +1268,7 @@ button {
 .dash-timer-sub small {
   display: block;
   margin-top: 8px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1306,7 +1306,7 @@ button {
 .dash-timer-sub strong {
   display: block;
   margin-top: 8px;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 32px;
   line-height: 1;
 }
@@ -1322,7 +1322,7 @@ button {
   min-height: 104px;
   padding: 14px;
   border-radius: 20px;
-  color: #8E747C;
+  color: #B8909A;
 }
 
 .status-card svg {
@@ -1338,7 +1338,7 @@ button {
 .status-card strong {
   display: block;
   margin-top: 4px;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 19px;
 }
 
@@ -1361,7 +1361,7 @@ button {
   margin-top: 14px;
   padding: 15px;
   border-radius: 20px;
-  color: #6A5558;
+  color: #5C4033;
 }
 
 .debug-panel h3 {
@@ -1369,7 +1369,7 @@ button {
   align-items: center;
   gap: 8px;
   margin: 0 0 10px;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 15px;
 }
 
@@ -1378,7 +1378,7 @@ button {
   max-height: 220px;
   margin: 0;
   white-space: pre-wrap;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
 }
 
@@ -1388,7 +1388,7 @@ button {
   gap: 10px;
   padding: 9px 0;
   border-top: 1px solid rgba(160, 120, 132, 0.16);
-  color: #8E747C;
+  color: #B8909A;
   font-size: 13px;
 }
 
@@ -1397,11 +1397,11 @@ button {
 }
 
 .event-row strong {
-  color: #5F4B50;
+  color: #5C4033;
 }
 
 .event-row time {
-  color: #B1979F;
+  color: #B8909A;
 }
 
 .memory-stats {
@@ -1420,14 +1420,14 @@ button {
 
 .memory-stat span {
   display: block;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
 }
 
 .memory-stat strong {
   display: block;
   margin-top: 6px;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 22px;
 }
 
@@ -1437,7 +1437,7 @@ button {
   gap: 7px;
   min-height: 36px;
   margin-bottom: 10px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 13px;
 }
 
@@ -1458,7 +1458,7 @@ button {
 .memory-breadcrumb strong {
   min-width: 0;
   overflow: hidden;
-  color: #5F4B50;
+  color: #5C4033;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -1468,7 +1468,7 @@ button {
   flex-wrap: wrap;
   gap: 7px;
   margin-top: 10px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
 }
 
@@ -1490,7 +1490,7 @@ button {
   padding: 15px;
   border-radius: 21px;
   text-align: left;
-  color: #6A5558;
+  color: #5C4033;
   border: 1px solid rgba(255, 255, 255, 0.46);
   background: rgba(255, 250, 251, 0.72);
   backdrop-filter: blur(16px);
@@ -1500,14 +1500,14 @@ button {
 
 .memory-category-card span {
   display: block;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 13px;
 }
 
 .memory-category-card strong {
   display: block;
   margin-top: 7px;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 30px;
   line-height: 1;
 }
@@ -1515,7 +1515,7 @@ button {
 .memory-category-card small {
   display: block;
   margin-top: 10px;
-  color: #8E747C;
+  color: #B8909A;
   line-height: 1.45;
 }
 
@@ -1534,7 +1534,7 @@ button {
   min-width: 0;
   border: 0;
   outline: 0;
-  color: #5E4A4E;
+  color: #5C4033;
   background: rgba(255, 250, 251, 0.58);
 }
 
@@ -1545,7 +1545,7 @@ button {
 
 .memory-section-title {
   margin: 18px 2px 9px;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 15px;
 }
 
@@ -1561,7 +1561,7 @@ button {
   padding: 14px;
   border-radius: 20px;
   text-align: left;
-  color: #6A5558;
+  color: #5C4033;
   border: 1px solid rgba(255, 255, 255, 0.46);
   background: rgba(255, 250, 251, 0.72);
   backdrop-filter: blur(16px);
@@ -1588,7 +1588,7 @@ button {
 .memory-bucket-row-head strong {
   min-width: 0;
   overflow: hidden;
-  color: #5F4B50;
+  color: #5C4033;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: 15px;
@@ -1596,7 +1596,7 @@ button {
 
 .memory-bucket-row-head small {
   grid-column: 2;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
 }
 
@@ -1612,7 +1612,7 @@ button {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
 }
 
@@ -1624,14 +1624,14 @@ button {
 
 .memory-bucket-head-card strong {
   display: block;
-  color: #5F4B50;
+  color: #5C4033;
   font-size: 18px;
 }
 
 .memory-bucket-head-card > span {
   display: block;
   margin-top: 5px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 13px;
 }
 
@@ -1640,7 +1640,7 @@ button {
   overflow: hidden;
   width: 100%;
   padding: 0;
-  color: #5F4B50;
+  color: #5C4033;
   background: transparent;
   text-align: left;
   line-height: 1.72;
@@ -1660,7 +1660,7 @@ button {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
 }
 
@@ -1676,7 +1676,7 @@ button {
   overflow: hidden;
   padding: 0;
   border-radius: 20px;
-  color: #6A5558;
+  color: #5C4033;
   background:
     linear-gradient(
       135deg,
@@ -1718,14 +1718,14 @@ button {
 .memory-bucket-top strong {
   min-width: 0;
   overflow: hidden;
-  color: #5F4B50;
+  color: #5C4033;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: 15px;
 }
 
 .memory-bucket-top small {
-  color: #8E747C;
+  color: #B8909A;
   font-size: 11px;
 }
 
@@ -1734,7 +1734,7 @@ button {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 9px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
 }
 
@@ -1769,7 +1769,7 @@ button {
 
 .memory-keywords {
   margin-top: 10px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1781,7 +1781,7 @@ button {
   min-height: 230px;
   padding: 24px;
   border-radius: 22px;
-  color: #8E747C;
+  color: #B8909A;
   text-align: center;
 }
 
@@ -1791,7 +1791,7 @@ button {
 
 .memory-offline strong {
   margin-top: 10px;
-  color: #5F4B50;
+  color: #5C4033;
 }
 
 .memory-offline span {
@@ -1803,7 +1803,7 @@ button {
   min-height: 90px;
   padding: 16px;
   border-radius: 20px;
-  color: #5F4B50;
+  color: #5C4033;
 }
 
 .glass-card.action {
@@ -1847,7 +1847,7 @@ button {
 }
 
 .reader-top span {
-  color: #B1979F;
+  color: #B8909A;
 }
 
 .reader-top strong {
@@ -1925,7 +1925,7 @@ button {
   overflow-y: auto;
   padding: 24px 20px calc(22px + var(--safe-bottom));
   border-radius: 30px;
-  color: #5F4B50;
+  color: #5C4033;
 }
 
 .sheet-title {
@@ -1952,7 +1952,7 @@ button {
   display: grid;
   gap: 8px;
   margin-top: 14px;
-  color: #8E747C;
+  color: #B8909A;
   font-weight: 700;
 }
 
@@ -1967,7 +1967,7 @@ button {
 }
 
 .settings-sheet select {
-  color: #5E4A4E;
+  color: #5C4033;
   background: rgba(255, 250, 251, 0.58);
   outline: 0;
   appearance: none;
@@ -1988,12 +1988,12 @@ button {
 
 .settings-sheet .danger {
   color: #FFF8FA;
-  background: #6A5558;
+  background: #5C4033;
 }
 
 .settings-note {
   margin: 10px 0 0;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 13px;
 }
 
@@ -2013,7 +2013,7 @@ button {
 
 .login-card .eyebrow {
   margin: 0 0 4px;
-  color: #8E747C;
+  color: #B8909A;
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -2066,9 +2066,9 @@ button {
 :root {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   --bg: #fdf9fa;
-  --ink: #2a1f24;
-  --ink-soft: #6d5961;
-  --ink-mute: #a89098;
+  --ink: #5C4033;
+  --ink-soft: #B8909A;
+  --ink-mute: #B8909A;
   --accent: #b86b81;
   --accent-faint: #faeef2;
   --line: #ede3e7;
