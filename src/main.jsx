@@ -191,6 +191,28 @@ function isBubbleLikeMessage(message) {
   return deriveMessageRole(message) === 'user' || deriveMessageRole(message) === 'assistant';
 }
 
+function hasMeaningfulPartContent(part) {
+  if (!part || typeof part !== 'object') return false;
+  if (part.type === 'thinking') {
+    return Boolean(String(part.content || '').trim()) || Boolean(part.placeholder);
+  }
+  if (part.type === 'tool') {
+    return Boolean(String(part.name || '').trim() || String(part.content || '').trim());
+  }
+  return Boolean(String(part.content || part.text || '').trim());
+}
+
+function isEmptyAssistantShell(message) {
+  if (!message || deriveMessageRole(message) !== 'assistant') return false;
+  if (message.type === 'typing_indicator' || message.type === 'audio') return false;
+  if (message.meta?.streamingTurn || message.meta?.typing || message.meta?.pending) return false;
+
+  const content = String(message.content || '').trim();
+  const parts = Array.isArray(message.parts) ? message.parts : [];
+  const hasMeaningfulParts = parts.some((part) => hasMeaningfulPartContent(part));
+  return !content && !hasMeaningfulParts;
+}
+
 function buildTimelineEntries(message) {
   if (!message) return [];
   if (message.type === 'typing_indicator' || message.type === 'mcp_approval' || message.type === 'audio') {
@@ -235,7 +257,9 @@ function buildChatTimeline(messages) {
   const timeline = [];
   let previousTimed = null;
 
-  messages.forEach((message) => {
+  messages
+    .filter((message) => !isEmptyAssistantShell(message))
+    .forEach((message) => {
     if (message?.ts) {
       if (!previousTimed || !isSameCalendarDay(previousTimed.ts, message.ts)) {
         timeline.push({ kind: 'day', id: `day-${message.id}`, label: formatDayDivider(message.ts) });
@@ -245,7 +269,7 @@ function buildChatTimeline(messages) {
       previousTimed = message;
     }
     timeline.push(...buildTimelineEntries(message));
-  });
+    });
 
   for (let index = 0; index < timeline.length; index += 1) {
     const item = timeline[index];
@@ -870,7 +894,7 @@ function mergeIncomingMessage(prevMessages, incoming, activeConversationId) {
 
 function sanitizeMessagesForCache(messages) {
   return messages
-    .filter((message) => message && message.type !== 'typing_indicator')
+    .filter((message) => message && message.type !== 'typing_indicator' && !isEmptyAssistantShell(message))
     .map((message) => toStoredMessage(message));
 }
 
@@ -882,7 +906,7 @@ function DebugPartsPanel({
   historyDebug,
   saveDebug
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const scopeKey = debugCacheScopeKey(sessionId, conversationId);
   const cacheScope = useMemo(() => readDebugCacheScope(sessionId, conversationId), [sessionId, conversationId, messages, historyDebug, saveDebug]);
   const memorySummaries = useMemo(
@@ -898,9 +922,11 @@ function DebugPartsPanel({
     <div style={{
       position: 'fixed',
       right: 12,
-      bottom: 98,
-      width: 'min(360px, calc(100vw - 24px))',
-      maxHeight: '55dvh',
+      top: open ? 'calc(env(safe-area-inset-top, 0px) + 76px)' : 'auto',
+      bottom: open ? 'auto' : 'calc(env(safe-area-inset-bottom, 0px) + 108px)',
+      width: open ? 'min(360px, calc(100vw - 24px))' : 'fit-content',
+      minWidth: open ? 0 : 140,
+      maxHeight: '48dvh',
       overflow: 'auto',
       zIndex: 9999,
       background: 'rgba(255,255,255,0.96)',
@@ -913,7 +939,7 @@ function DebugPartsPanel({
       color: '#3f3136',
       backdropFilter: 'blur(14px)'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: open ? 8 : 0 }}>
         <strong>parts debug</strong>
         <button type="button" onClick={() => setOpen((value) => !value)} style={{ border: 0, background: 'transparent', color: '#b86b81', fontWeight: 600 }}>
           {open ? '收起' : '展开'}
@@ -1262,13 +1288,17 @@ function App() {
             });
           }
           clearTypewriterQueue();
-          setMessages(history.map((message) => normalizeHistoryMessage(
-            message,
-            { showThinking: settings.showThinking },
-            cachedMap,
-            cachedMessages,
-            usedCacheKeys
-          )));
+          setMessages(
+            history
+              .map((message) => normalizeHistoryMessage(
+                message,
+                { showThinking: settings.showThinking },
+                cachedMap,
+                cachedMessages,
+                usedCacheKeys
+              ))
+              .filter((message) => !isEmptyAssistantShell(message))
+          );
           return;
         }
         if (payload.type === 'typing_indicator') {
