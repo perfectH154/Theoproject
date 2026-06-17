@@ -12,11 +12,25 @@ const {
 const { saveImageBase64, saveAudioBase64 } = require('./services/media');
 const { transcribeAudio } = require('./services/stt');
 const { shouldSynthesize, synthesizeSpeech } = require('./services/tts');
+const { notifyMessage } = require('./push-agent/notifier');
 
 function send(ws, payload) {
   if (ws.readyState === 1) {
     ws.send(JSON.stringify(payload));
   }
+}
+
+// 判断指定会话当前是否还有“活着”的 WebSocket 客户端在监听。
+// 移动端 PWA 被挂起/关闭后，socket 可能短时间仍显示 OPEN，但不会再回应心跳 pong，
+// 因此这里同时检查 readyState 与心跳维护的 isAlive 标记。
+function hasLiveClientForSession(wss, sessionId) {
+  if (!wss) return false;
+  for (const client of wss.clients) {
+    if (client.readyState === 1 && client.isAlive !== false && client.sessionId === sessionId) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function sanitizeText(text) {
@@ -105,7 +119,7 @@ function createWebSocketServer(server, claudeManager) {
 
       try {
         const msg = JSON.parse(raw.toString());
-        await handleClientMessage(ws, msg, claudeManager);
+        await handleClientMessage(ws, msg, claudeManager, wss);
       } catch (error) {
         send(ws, { type: 'status', content: 'error', meta: { message: error.message } });
       }
@@ -129,7 +143,7 @@ function createWebSocketServer(server, claudeManager) {
   return wss;
 }
 
-async function handleClientMessage(ws, msg, claudeManager) {
+async function handleClientMessage(ws, msg, claudeManager, wss) {
   const type = msg.type;
   const meta = msg.meta && typeof msg.meta === 'object' ? msg.meta : {};
   const sessionId = meta.session_id || meta.sessionId || ws.sessionId || 'default';
@@ -221,6 +235,15 @@ async function handleClientMessage(ws, msg, claudeManager) {
     content: 'assistant_message_saved',
     meta: { session_id: sessionId, conversation_id: conversationId }
   });
+
+  // 关键修复：当本会话已经没有“活着”的 WebSocket 客户端时（例如 PWA 被切到后台/关闭，
+  // 或发完消息后锁屏导致连接被挂起），回复无法通过 WS 送达，改用 Web Push 通知，
+  // 这样 PWA 关闭状态下也能收到新消息（网页端保持标签页常连，所以一直正常）。
+  if (!hasLiveClientForSession(wss, sessionId)) {
+    notifyMessage({ text: assistantContent, conversationId }).catch((error) => {
+      logger.warn('Web Push 推送新消息失败', { sessionId, conversationId, message: error.message });
+    });
+  }
 
   if (shouldSynthesize(meta)) {
     try {

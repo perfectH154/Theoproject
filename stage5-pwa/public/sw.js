@@ -36,5 +36,18 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(self.clients.openWindow(event.notification.data.url));
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/chat/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes('/chat/') && 'focus' in client) {
+          if ('navigate' in client && targetUrl) {
+            client.navigate(targetUrl).catch(() => {});
+          }
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    })
+  );
 });
