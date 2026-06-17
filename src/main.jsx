@@ -898,6 +898,15 @@ function sanitizeMessagesForCache(messages) {
     .map((message) => toStoredMessage(message));
 }
 
+function hasAssistantReplySince(messages = [], conversationId, sinceTs = 0) {
+  return (messages || []).some((message) => (
+    deriveMessageRole(message) === 'assistant'
+    && !isEmptyAssistantShell(message)
+    && (message.meta?.conversation_id || conversationId) === conversationId
+    && Number(message.ts || 0) >= Number(sinceTs || 0)
+  ));
+}
+
 function DebugPartsPanel({
   enabled,
   sessionId,
@@ -1043,6 +1052,7 @@ function App() {
   const attachmentsRef = useRef(attachments);
   const typewriterRef = useRef({ queue: [], running: false, runId: 0 });
   const cacheSaveTimerRef = useRef(null);
+  const replyFallbackRef = useRef({ token: 0, timers: [] });
   const debugParts = useMemo(() => debugPartsEnabled(), []);
   const [historyDebug, setHistoryDebug] = useState(null);
   const [saveDebug, setSaveDebug] = useState(null);
@@ -1059,6 +1069,17 @@ function App() {
   useEffect(() => () => {
     attachmentsRef.current.forEach(cleanupAttachmentPreview);
   }, []);
+
+  useEffect(() => () => {
+    replyFallbackRef.current.timers.forEach((timer) => clearTimeout(timer));
+    replyFallbackRef.current.timers = [];
+  }, []);
+
+  useEffect(() => {
+    replyFallbackRef.current.token += 1;
+    replyFallbackRef.current.timers.forEach((timer) => clearTimeout(timer));
+    replyFallbackRef.current.timers = [];
+  }, [activeConversationId, settings.sessionId]);
 
   useEffect(() => {
     const cached = loadConversationMessages(settings.sessionId, activeConversationId);
@@ -1171,6 +1192,12 @@ function App() {
   function appendIncomingMessages(incoming) {
     if (!incoming) return;
     if (incoming.type === 'assistant') {
+      const incomingText = textContentFromParts(incoming.parts).trim() || String(incoming.content || '').trim();
+      if (incomingText) {
+        replyFallbackRef.current.token += 1;
+        replyFallbackRef.current.timers.forEach((timer) => clearTimeout(timer));
+        replyFallbackRef.current.timers = [];
+      }
       const speed = getTypingSpeed(settingsRef.current.typingSpeed);
       const textPart = normalizeStructuredParts(incoming.parts, incoming.content).find((part) => part.type === 'text' && part.content);
       const preparedIncoming = textPart && speed.delay !== 0
@@ -1408,6 +1435,32 @@ function App() {
     return data;
   }
 
+  function scheduleReplyFallback(conversationId, sentAt) {
+    replyFallbackRef.current.token += 1;
+    const token = replyFallbackRef.current.token;
+    replyFallbackRef.current.timers.forEach((timer) => clearTimeout(timer));
+    replyFallbackRef.current.timers = [];
+
+    const runFallback = async () => {
+      if (replyFallbackRef.current.token !== token) return;
+      if (hasAssistantReplySince(messages, conversationId, sentAt)) return;
+      try {
+        const data = await reloadHistory(conversationId);
+        if (hasAssistantReplySince(data.messages || [], conversationId, sentAt)) {
+          replyFallbackRef.current.token += 1;
+          replyFallbackRef.current.timers.forEach((timer) => clearTimeout(timer));
+          replyFallbackRef.current.timers = [];
+        }
+      } catch {
+        // 静默 fallback，不打扰用户
+      }
+    };
+
+    replyFallbackRef.current.timers = [2000, 6000].map((delay) => (
+      window.setTimeout(runFallback, delay)
+    ));
+  }
+
   async function createNewConversation() {
     try {
       const data = await apiPost(settings.serverUrl, '/api/conversations', settings.token, { title: '新对话' });
@@ -1516,6 +1569,7 @@ function App() {
 
   function sendText() {
     const content = input.trim();
+    const sentAt = Date.now();
     if (!content && attachments.length === 0) {
       setError('先写一句话再发送');
       return false;
@@ -1542,13 +1596,14 @@ function App() {
       attachments: readyAttachments
     };
     wsRef.current.send({ type: 'text', content, meta });
-    setMessages((prev) => [...prev, { id: nowId(), type: 'user', content: content || '[附件]', meta, attachments: readyAttachments, ts: Date.now() }]);
+    setMessages((prev) => [...prev, { id: nowId(), type: 'user', content: content || '[附件]', meta, attachments: readyAttachments, ts: sentAt }]);
     setInput('');
     setAttachments((prev) => {
       prev.forEach(cleanupAttachmentPreview);
       return [];
     });
     setError('');
+    scheduleReplyFallback(activeConversationId, sentAt);
     return true;
   }
 
