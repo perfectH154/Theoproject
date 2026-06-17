@@ -31,7 +31,7 @@ import {
   WifiOff,
   X
 } from 'lucide-react';
-import { apiDelete, apiGet, apiPatch, apiPost, apiUpload, wsUrl } from './lib/api';
+import { apiDelete, apiGet, apiPatch, apiPost, apiUpload, importEpub, wsUrl } from './lib/api';
 import {
   loadConversationMessages,
   loadSettings,
@@ -1754,7 +1754,7 @@ function App() {
             setError={setError}
           />
         )}
-        {tab === 'read' && <ReadTab />}
+        {tab === 'read' && <ReadTab settings={settings} setError={setError} />}
         {tab === 'memory' && <MemoryTabV2 settings={settings} setError={setError} approveMcpTool={approveMcpTool} />}
       </main>
 
@@ -2447,76 +2447,333 @@ function DashTab({ connected, status, error, refreshStatus, settings, setError }
   );
 }
 
-function ReadTab() {
-  const [title, setTitle] = useState('read');
-  const [content, setContent] = useState('选择一本 txt / md / epub，先读起来。epub 会先抽取章节文本，复杂排版后面再精修。');
-  const [epubUrl, setEpubUrl] = useState('');
-  const renditionRef = useRef(null);
-  const viewerRef = useRef(null);
+function ReadTab({ settings, setError }) {
+  const base = (settings.serverUrl || window.location.origin).replace(/\/$/, '');
+  const token = settings.token;
 
-  async function openFile(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setTitle(file.name);
-    const lower = file.name.toLowerCase();
-    if (lower.endsWith('.epub')) {
-      const url = URL.createObjectURL(file);
-      setEpubUrl(url);
-      setContent('');
-      return;
+  const [books, setBooks] = useState([]);
+  const [loadingBooks, setLoadingBooks] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [book, setBook] = useState(null);
+  const [chapterNum, setChapterNum] = useState(1);
+  const [chapter, setChapter] = useState(null);
+  const [chapterLoading, setChapterLoading] = useState(false);
+  const [highlights, setHighlights] = useState([]);
+  const [notes, setNotes] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState('theo');
+  const [popup, setPopup] = useState(null);
+  const [chat, setChat] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatBusy, setChatBusy] = useState(false);
+
+  const contentRef = useRef(null);
+  const notesTimer = useRef(null);
+  const restoreScrollRef = useRef(0);
+  const progressTimer = useRef(null);
+
+  const loadBooks = async () => {
+    if (!token) return;
+    setLoadingBooks(true);
+    try {
+      const data = await apiGet(base, '/api/books', token);
+      setBooks(data.books || []);
+    } catch (err) {
+      setError?.(err.message);
+    } finally {
+      setLoadingBooks(false);
     }
-    setEpubUrl('');
-    setContent(await file.text());
-  }
+  };
 
   useEffect(() => {
-    if (!epubUrl || !viewerRef.current) return;
-    let cancelled = false;
-    (async () => {
-      const mod = await import('epubjs');
-      if (cancelled) return;
-      viewerRef.current.innerHTML = '';
-      const book = mod.default(epubUrl);
-      const rendition = book.renderTo(viewerRef.current, {
-        width: '100%',
-        height: '100%',
-        flow: 'paginated',
-        manager: 'default'
-      });
-      renditionRef.current = rendition;
-      await rendition.display();
-    })();
-    return () => {
-      cancelled = true;
-      try {
-        renditionRef.current?.destroy?.();
-      } catch {
-        // epubjs 清理失败不影响页面。
-      }
-    };
-  }, [epubUrl]);
+    loadBooks();
+  }, [base, token]);
 
+  // 切走/卸载时把笔记和进度立刻落盘。
+  useEffect(() => () => {
+    clearTimeout(notesTimer.current);
+    clearTimeout(progressTimer.current);
+  }, []);
+
+  async function onImport(event) {
+    const file = event.target.files?.[0];
+    if (file) {
+      event.target.value = '';
+      setImporting(true);
+      try {
+        const data = await importEpub(base, token, file);
+        await loadBooks();
+        if (data.bookId) await openBook(data.bookId);
+      } catch (err) {
+        setError?.(`导入失败：${err.message}`);
+      } finally {
+        setImporting(false);
+      }
+    }
+  }
+
+  async function openBook(bookId) {
+    try {
+      const manifest = await apiGet(base, `/api/books/${encodeURIComponent(bookId)}/manifest`, token);
+      setBook(manifest);
+      setChat([]);
+      let startChapter = 1;
+      restoreScrollRef.current = 0;
+      try {
+        const progress = await apiGet(base, `/api/books/${encodeURIComponent(bookId)}/progress`, token);
+        if (progress?.lastChapter) startChapter = progress.lastChapter;
+        if (progress?.lastLocation) restoreScrollRef.current = Number(progress.lastLocation) || 0;
+      } catch {
+        // 没有进度就从头读。
+      }
+      await openChapter(manifest, startChapter);
+    } catch (err) {
+      setError?.(err.message);
+    }
+  }
+
+  async function openChapter(manifest, n, keepScroll = true) {
+    const total = manifest.totalChapters || 1;
+    const num = Math.min(Math.max(1, n), total);
+    if (!keepScroll) restoreScrollRef.current = 0;
+    setChapterNum(num);
+    setChapterLoading(true);
+    setPopup(null);
+    try {
+      const id = encodeURIComponent(manifest.bookId);
+      const [ch, hl, nt] = await Promise.all([
+        apiGet(base, `/api/books/${id}/chapters/${num}`, token),
+        apiGet(base, `/api/books/${id}/highlights/${num}`, token).catch(() => ({ highlights: [] })),
+        apiGet(base, `/api/books/${id}/notes/${num}`, token).catch(() => ({ content: '' }))
+      ]);
+      setChapter(ch);
+      setHighlights(hl.highlights || []);
+      setNotes(nt.content || '');
+      saveProgress(num, restoreScrollRef.current);
+      // 等正文渲染好再恢复到上次的阅读位置。
+      const target = restoreScrollRef.current;
+      setTimeout(() => contentRef.current?.scrollTo?.({ top: target || 0 }), 60);
+    } catch (err) {
+      setError?.(err.message);
+    } finally {
+      setChapterLoading(false);
+    }
+  }
+
+  function saveProgress(num, scrollTop) {
+    if (!book && !num) return;
+    const id = book?.bookId;
+    if (!id) return;
+    const total = book?.totalChapters || 1;
+    apiPost(base, `/api/books/${encodeURIComponent(id)}/progress`, token, {
+      percentage: Math.round((num / total) * 100),
+      lastChapter: num,
+      lastLocation: Math.round(scrollTop || 0)
+    }).catch(() => {});
+  }
+
+  function onScroll() {
+    if (!book || chapterLoading) return;
+    restoreScrollRef.current = contentRef.current?.scrollTop || 0;
+    clearTimeout(progressTimer.current);
+    progressTimer.current = setTimeout(() => saveProgress(chapterNum, restoreScrollRef.current), 600);
+  }
+
+  const chapterHtml = useMemo(() => {
+    if (!chapter?.content) return '';
+    return chapter.content.replace(/(src=")(\/api\/books\/[^"]+)"/g, (_m, p, u) => (
+      `${p}${base}${u}${u.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}"`
+    ));
+  }, [chapter, base, token]);
+
+  function captureSelection() {
+    const sel = window.getSelection?.();
+    const text = sel ? String(sel).trim() : '';
+    if (!text || text.length < 2) {
+      setPopup(null);
+      return;
+    }
+    let x = window.innerWidth / 2;
+    let y = window.innerHeight / 2;
+    try {
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      x = rect.left + rect.width / 2;
+      y = rect.top;
+    } catch {
+      // 拿不到位置就用屏幕中间。
+    }
+    setPopup({ x, y, text });
+  }
+
+  async function putJson(path, body) {
+    await fetch(`${base}${path}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  function addHighlight(text) {
+    if (highlights.some((h) => h.text === text)) return;
+    const next = [...highlights, { id: nowId(), text, createdAt: Date.now() }];
+    setHighlights(next);
+    if (book) putJson(`/api/books/${encodeURIComponent(book.bookId)}/highlights/${chapterNum}`, { highlights: next }).catch(() => {});
+  }
+
+  function removeHighlight(id) {
+    const next = highlights.filter((h) => h.id !== id);
+    setHighlights(next);
+    if (book) putJson(`/api/books/${encodeURIComponent(book.bookId)}/highlights/${chapterNum}`, { highlights: next }).catch(() => {});
+  }
+
+  function onNotesChange(value) {
+    setNotes(value);
+    clearTimeout(notesTimer.current);
+    setNotesSaving(true);
+    notesTimer.current = setTimeout(async () => {
+      if (book) await putJson(`/api/books/${encodeURIComponent(book.bookId)}/notes/${chapterNum}`, { content: value }).catch(() => {});
+      setNotesSaving(false);
+    }, 700);
+  }
+
+  async function askTheo(selection, question) {
+    if (!book) return;
+    const q = String(question || '').trim() || '帮我讲讲这段。';
+    setPanelOpen(true);
+    setPanelTab('theo');
+    setChat((prev) => [...prev, { role: 'me', text: selection ? `「${selection}」\n${q}` : q }]);
+    setChatBusy(true);
+    try {
+      const data = await apiPost(base, `/api/books/${encodeURIComponent(book.bookId)}/chat`, token, {
+        chapterNumber: chapterNum,
+        selection,
+        content: q
+      });
+      setChat((prev) => [...prev, { role: 'theo', text: data.text || '[无回复]' }]);
+    } catch (err) {
+      setChat((prev) => [...prev, { role: 'theo', text: `（出错了：${err.message}）` }]);
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
+  if (!token) {
+    return <section className="reader"><article className="reader-page">先在「设置」里填好服务器和 Token，才能导入书。</article></section>;
+  }
+
+  if (!book) {
+    return (
+      <section className="reader">
+        <div className="reader-top">
+          <div><span>library</span><strong>书架</strong></div>
+          <label className="reader-upload">
+            {importing ? <Loader2 size={17} className="spin" /> : <Plus size={17} />}
+            {importing ? '导入中…' : '导入 epub'}
+            <input type="file" accept=".epub,application/epub+zip" onChange={onImport} disabled={importing} />
+          </label>
+        </div>
+        {loadingBooks && <p className="settings-note">加载书架…</p>}
+        {!loadingBooks && books.length === 0 && (
+          <article className="reader-page">书架还是空的。点右上角「导入 epub」上传第一本书，之后就能划线、批注、还能长按某句问 Théo。</article>
+        )}
+        <div className="book-grid">
+          {books.map((b) => (
+            <button key={b.bookId} className="book-card" onClick={() => openBook(b.bookId)}>
+              <div className="book-card-title">{b.bookTitle}</div>
+              <div className="book-card-meta">{b.bookAuthor} · {b.totalChapters} 章</div>
+            </button>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  const total = book.totalChapters || 1;
   return (
-    <section className="reader">
+    <section className="reader reader-open">
       <div className="reader-top">
-        <div>
-          <span>library</span>
-          <strong>{title}</strong>
+        <button className="reader-back" onClick={() => { setBook(null); setChapter(null); }}><ArrowLeft size={18} /></button>
+        <div className="reader-title-wrap">
+          <strong>{book.bookTitle}</strong>
+          <span>{chapter?.title || ''}</span>
         </div>
-        <label className="reader-upload">
-          <FileText size={17} />
-          导入
-          <input type="file" accept=".txt,.md,.epub,text/plain,text/markdown,application/epub+zip" onChange={openFile} />
-        </label>
+        <button className="reader-panel-toggle" onClick={() => setPanelOpen((v) => !v)}>
+          <MessageCircle size={18} />
+        </button>
       </div>
-      {epubUrl ? (
-        <div className="epub-shell">
-          <button onClick={() => renditionRef.current?.prev?.()}>上一页</button>
-          <div className="epub-viewer" ref={viewerRef} />
-          <button onClick={() => renditionRef.current?.next?.()}>下一页</button>
+
+      <div className="reader-body">
+        <article
+          className="reader-page reader-chapter"
+          ref={contentRef}
+          onScroll={onScroll}
+          onMouseUp={captureSelection}
+          onTouchEnd={captureSelection}
+          dangerouslySetInnerHTML={{ __html: chapterLoading ? '<p>加载中…</p>' : chapterHtml }}
+        />
+      </div>
+
+      <div className="reader-nav">
+        <button disabled={chapterNum <= 1} onClick={() => openChapter(book, chapterNum - 1, false)}>上一章</button>
+        <span>{chapterNum} / {total}</span>
+        <button disabled={chapterNum >= total} onClick={() => openChapter(book, chapterNum + 1, false)}>下一章</button>
+      </div>
+
+      {popup && (
+        <div className="select-popup" style={{ left: Math.max(8, Math.min(popup.x - 80, window.innerWidth - 168)), top: Math.max(8, popup.y - 48) }}>
+          <button onClick={() => { addHighlight(popup.text); setPopup(null); }}>划线</button>
+          <button onClick={() => { askTheo(popup.text, ''); setPopup(null); }}>问 Théo</button>
         </div>
-      ) : (
-        <article className="reader-page">{content}</article>
+      )}
+
+      {panelOpen && (
+        <div className="reader-panel">
+          <div className="reader-panel-tabs">
+            {[['theo', 'Théo'], ['notes', '笔记'], ['highlights', `高亮${highlights.length ? ` (${highlights.length})` : ''}`]].map(([id, label]) => (
+              <button key={id} className={panelTab === id ? 'active' : ''} onClick={() => setPanelTab(id)}>{label}</button>
+            ))}
+            <button className="reader-panel-close" onClick={() => setPanelOpen(false)}><X size={16} /></button>
+          </div>
+
+          {panelTab === 'theo' && (
+            <div className="reader-chat">
+              <div className="reader-chat-list">
+                {chat.length === 0 && <p className="settings-note">选中书里的句子点「问 Théo」，或直接在下面问关于本章的问题。</p>}
+                {chat.map((m, i) => (
+                  <div key={i} className={`reader-bubble ${m.role}`}>{m.text}</div>
+                ))}
+                {chatBusy && <div className="reader-bubble theo"><Loader2 size={14} className="spin" /> Théo 正在读这一章…</div>}
+              </div>
+              <form
+                className="reader-chat-input"
+                onSubmit={(e) => { e.preventDefault(); if (chatInput.trim() && !chatBusy) { const q = chatInput; setChatInput(''); askTheo('', q); } }}
+              >
+                <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="问问这一章…" />
+                <button type="submit" disabled={chatBusy || !chatInput.trim()}><Send size={16} /></button>
+              </form>
+            </div>
+          )}
+
+          {panelTab === 'notes' && (
+            <div className="reader-notes">
+              <textarea value={notes} onChange={(e) => onNotesChange(e.target.value)} placeholder="写下本章的笔记…（Théo 也能读到）" />
+              <span className="settings-note">{notesSaving ? '保存中…' : '已自动保存'}</span>
+            </div>
+          )}
+
+          {panelTab === 'highlights' && (
+            <div className="reader-highlights">
+              {highlights.length === 0 && <p className="settings-note">还没有划线。选中句子点「划线」。</p>}
+              {highlights.map((h) => (
+                <div key={h.id} className="reader-highlight-item">
+                  <span>{h.text}</span>
+                  <button onClick={() => removeHighlight(h.id)}><Trash2 size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </section>
   );
