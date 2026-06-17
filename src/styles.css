@@ -46,9 +46,13 @@
   --divider: rgba(160, 120, 132, 0.16);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --nav-height: 64px;
-  --composer-height: 64px;
-  --tabbar-height: 92px;
+  --nav-height: 56px;
+  --composer-height: 52px;
+  --tabbar-height: 76px;
+  --radius-bubble: 16px;
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-pill: 24px;
 }
 
 * {
@@ -2113,6 +2117,9 @@ body {
 }
 
 .topbar {
+  height: calc(var(--nav-height) + var(--safe-top));
+  padding: var(--safe-top) 16px 0;
+  grid-template-columns: 38px 1fr 38px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -2129,9 +2136,13 @@ body {
 .topbar h1,
 .login-card h1 {
   color: var(--ink);
-  font-size: 33px;
+  font-size: 30px;
   font-weight: 500;
   text-shadow: none;
+}
+
+.title-lockup {
+  gap: 6px;
 }
 
 .online-dot {
@@ -2142,6 +2153,9 @@ body {
 }
 
 .icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-control);
   color: var(--ink-soft);
   background: rgba(253, 249, 250, 0.58);
   border: 1px solid rgba(237, 227, 231, 0.8);
@@ -2152,11 +2166,12 @@ body {
 }
 
 .message-list {
-  padding: 22px 18px calc(var(--composer-height) + var(--tabbar-height) + var(--safe-bottom) + 36px);
+  padding: 12px 18px calc(var(--composer-height) + var(--tabbar-height) + var(--safe-bottom) + 24px);
 }
 
 .chat-empty {
-  margin-top: 44px;
+  margin-top: 18px;
+  border-radius: var(--radius-card);
   color: var(--ink-soft);
 }
 
@@ -2199,7 +2214,7 @@ body {
   width: fit-content;
   max-width: 100%;
   padding: 7px 13px;
-  border-radius: 16px;
+  border-radius: var(--radius-bubble);
   font-size: 15px;
   line-height: 1.5;
   color: var(--ink);
@@ -2210,13 +2225,13 @@ body {
 .msg.from-theo .body {
   background: rgba(255, 252, 253, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 4px 16px 16px 16px;
+  border-radius: var(--radius-bubble);
 }
 
 .msg.from-me .body {
   color: var(--ink);
   background: rgba(232, 178, 195, 0.78);
-  border-radius: 16px 16px 4px 16px;
+  border-radius: var(--radius-bubble);
 }
 
 .msg .meta {
@@ -2251,7 +2266,7 @@ body {
   color: var(--ink-soft);
   background: rgba(255, 252, 253, 0.62);
   border: 1px dashed var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -2291,7 +2306,7 @@ body {
   padding: 0 12px;
   color: var(--ink-soft);
   background: rgba(250, 238, 242, 0.84);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .message-kicker {
@@ -2319,7 +2334,9 @@ body {
   right: 0;
   bottom: calc(var(--tabbar-height) + var(--safe-bottom));
   min-height: var(--composer-height);
-  padding: 10px 18px 12px;
+  padding: 8px 16px;
+  grid-template-columns: 34px minmax(0, 1fr) 44px;
+  gap: 6px;
   border-top: 1px solid var(--line);
   border-radius: 0;
   box-shadow: none;
@@ -2331,21 +2348,28 @@ body {
 
 .tool-button,
 .send-button {
-  width: auto;
-  height: auto;
+  height: 34px;
   min-width: auto;
-  padding: 0;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
   background: transparent;
   box-shadow: none;
 }
 
 .tool-button {
+  width: 34px;
   color: var(--ink-soft);
 }
 
+.send-button {
+  min-width: 44px;
+}
+
 .composer textarea {
-  min-height: 28px;
+  min-height: 24px;
   padding: 0;
+  line-height: 1.35;
+  border-radius: var(--radius-control);
   color: var(--ink);
   background: transparent;
 }
@@ -2356,13 +2380,17 @@ body {
 
 .text-button {
   color: var(--accent);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .tabbar {
+  height: calc(var(--tabbar-height) + var(--safe-bottom));
+  padding: 8px 14px calc(8px + var(--safe-bottom));
+  gap: 4px;
+  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
   border-top: 1px solid var(--line);
   box-shadow: none;
 }
@@ -2372,7 +2400,54 @@ body {
 }
 
 .tab span {
-  font-size: 13px;
+  font-size: 12px;
+}
+
+.tab {
+  height: 52px;
+  gap: 3px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+}
+
+.tab svg {
+  width: 18px;
+  height: 18px;
+}
+
+.glass-card,
+.warning,
+.empty-state,
+.login-card,
+.dash-quote,
+.counter,
+.memory-offline,
+.memory-bucket,
+.memory-detail-card,
+.reader-panel,
+.epub-shell,
+.epub-viewer,
+.settings-background-preview,
+.message-menu,
+.edit-message-sheet,
+.code-block-wrap {
+  border-radius: var(--radius-card);
+}
+
+.message-menu button,
+.edit-actions button,
+.preview-toggle,
+.preview-toolbar button,
+.preview-fullscreen-bar button,
+.settings-upload-button,
+.settings-background-actions button,
+.settings-sheet input,
+.settings-sheet select,
+.login-card input,
+.login-card button,
+.memory-search input,
+.attachment-file-icon {
+  border-radius: var(--radius-control);
 }
 
 .dash-page,
