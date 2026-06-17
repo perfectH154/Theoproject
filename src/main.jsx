@@ -904,6 +904,73 @@ function mergeIncomingMessage(prevMessages, incoming, activeConversationId) {
   return next;
 }
 
+function normalizedMessageText(message) {
+  return String(textContentFromParts(normalizeStructuredParts(message?.parts, message?.content)) || message?.content || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function messageDbIdFromMeta(message) {
+  const metaId = Number(message?.meta?.db_id);
+  if (Number.isFinite(metaId) && metaId > 0) return metaId;
+  const idMatch = String(message?.id || '').match(/^db-(\d+)$/);
+  return idMatch ? Number(idMatch[1]) : null;
+}
+
+function mergeHistoryIntoCurrentMessages(prevMessages, historyMessages) {
+  const next = prevMessages.filter((message) => message?.type !== 'typing_indicator');
+  const usedHistoryIndexes = new Set();
+
+  historyMessages.forEach((historyMessage, historyIndex) => {
+    if (!historyMessage || isEmptyAssistantShell(historyMessage)) return;
+    const historyRole = deriveMessageRole(historyMessage);
+    const historyDbId = messageDbIdFromMeta(historyMessage);
+    const historyText = normalizedMessageText(historyMessage);
+    let matchIndex = -1;
+
+    if (historyDbId) {
+      matchIndex = next.findIndex((message) => messageDbIdFromMeta(message) === historyDbId);
+    }
+    if (matchIndex === -1 && historyMessage.id) {
+      matchIndex = next.findIndex((message) => message.id === historyMessage.id);
+    }
+    if (matchIndex === -1 && historyText) {
+      matchIndex = next.findIndex((message) => (
+        deriveMessageRole(message) === historyRole
+        && normalizedMessageText(message) === historyText
+      ));
+    }
+    if (matchIndex === -1 && Number.isFinite(historyMessage.ts)) {
+      matchIndex = next.findIndex((message) => (
+        deriveMessageRole(message) === historyRole
+        && Number.isFinite(message.ts)
+        && Math.abs(message.ts - historyMessage.ts) <= 30 * 1000
+        && (!historyText || !normalizedMessageText(message) || normalizedMessageText(message) === historyText)
+      ));
+    }
+
+    if (matchIndex === -1) {
+      next.push(historyMessage);
+      usedHistoryIndexes.add(historyIndex);
+      return;
+    }
+
+    const current = next[matchIndex];
+    const currentParts = normalizeStructuredParts(current.parts, current.content);
+    const historyParts = normalizeStructuredParts(historyMessage.parts, historyMessage.content);
+    next[matchIndex] = createStructuredMessage(historyMessage, {
+      parts: historyParts.length ? historyParts : currentParts,
+      meta: { ...(current.meta || {}), ...(historyMessage.meta || {}) },
+      attachments: historyMessage.attachments?.length ? historyMessage.attachments : (current.attachments || [])
+    });
+    usedHistoryIndexes.add(historyIndex);
+  });
+
+  return next
+    .filter((message) => !isEmptyAssistantShell(message))
+    .sort((left, right) => (left.ts || 0) - (right.ts || 0));
+}
+
 function sanitizeMessagesForCache(messages) {
   return messages
     .filter((message) => message && message.type !== 'typing_indicator' && !isEmptyAssistantShell(message))
@@ -1052,9 +1119,11 @@ function App() {
   const listRef = useRef(null);
   const fileInputRef = useRef(null);
   const settingsRef = useRef(settings);
+  const activeConversationRef = useRef(activeConversationId);
   const attachmentsRef = useRef(attachments);
   const typewriterRef = useRef({ queue: [], running: false, runId: 0 });
   const cacheSaveTimerRef = useRef(null);
+  const historyFallbackTimersRef = useRef([]);
   const debugParts = useMemo(() => debugPartsEnabled(), []);
   const [historyDebug, setHistoryDebug] = useState(null);
   const [saveDebug, setSaveDebug] = useState(null);
@@ -1063,6 +1132,10 @@ function App() {
     settingsRef.current = settings;
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    activeConversationRef.current = activeConversationId;
+  }, [activeConversationId]);
 
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -1078,6 +1151,11 @@ function App() {
       clearTypewriterQueue();
       setMessages(cached.map((message) => restoreStoredMessage(message)));
     }
+  }, [settings.sessionId, activeConversationId]);
+
+  useEffect(() => () => {
+    historyFallbackTimersRef.current.forEach((timer) => clearTimeout(timer));
+    historyFallbackTimersRef.current = [];
   }, [settings.sessionId, activeConversationId]);
 
   useEffect(() => {
@@ -1218,6 +1296,47 @@ function App() {
     setMessages((prev) => mergeIncomingMessage(prev, incoming, activeConversationId));
   }
 
+  function normalizeHistoryRows(history) {
+    const cachedMessages = loadConversationMessages(settings.sessionId, activeConversationId);
+    const cachedMap = new Map(cachedMessages.map((message) => [messageStorageKey(message), message]));
+    const usedCacheKeys = new Set();
+    if (debugParts) {
+      const debugUsedCacheKeys = new Set();
+      const rows = history
+        .filter((row) => (row.role === 'user' ? 'user' : 'assistant') === 'assistant')
+        .map((row) => {
+          const match = findCachedMessageForHistoryRow(row, cachedMap, cachedMessages, debugUsedCacheKeys);
+          if (match?.key) debugUsedCacheKeys.add(match.key);
+          const parts = normalizeStructuredParts(match?.message?.parts, match?.message?.content);
+          const matchType = !match ? 'none' : match.key === `db:${row.id}` ? 'exact' : 'fallback';
+          return {
+            rowId: row.id,
+            contentLength: String(row.content || '').length,
+            matchedCacheKey: match?.key || '',
+            matchType,
+            matchedPartsLength: parts.length,
+            matchedPartTypes: parts.map((part) => part.type)
+          };
+        });
+      setHistoryDebug({
+        rowCount: history.length,
+        exactHits: rows.filter((row) => row.matchType === 'exact').length,
+        fallbackHits: rows.filter((row) => row.matchType === 'fallback').length,
+        missCount: rows.filter((row) => row.matchType === 'none').length,
+        rows
+      });
+    }
+    return history
+      .map((message) => normalizeHistoryMessage(
+        message,
+        { showThinking: settings.showThinking },
+        cachedMap,
+        cachedMessages,
+        usedCacheKeys
+      ))
+      .filter((message) => !isEmptyAssistantShell(message));
+  }
+
   useEffect(() => {
     setSettings((prev) => (
       prev.conversationId === activeConversationId ? prev : { ...prev, conversationId: activeConversationId }
@@ -1270,47 +1389,8 @@ function App() {
         const payload = JSON.parse(event.data);
         if (payload.type === 'status' && payload.content === 'history') {
           const history = payload.meta.messages || [];
-          const cachedMessages = loadConversationMessages(settings.sessionId, activeConversationId);
-          const cachedMap = new Map(cachedMessages.map((message) => [messageStorageKey(message), message]));
-          const usedCacheKeys = new Set();
-          if (debugParts) {
-            const debugUsedCacheKeys = new Set();
-            const rows = history
-              .filter((row) => (row.role === 'user' ? 'user' : 'assistant') === 'assistant')
-              .map((row) => {
-                const match = findCachedMessageForHistoryRow(row, cachedMap, cachedMessages, debugUsedCacheKeys);
-                if (match?.key) debugUsedCacheKeys.add(match.key);
-                const parts = normalizeStructuredParts(match?.message?.parts, match?.message?.content);
-                const matchType = !match ? 'none' : match.key === `db:${row.id}` ? 'exact' : 'fallback';
-                return {
-                  rowId: row.id,
-                  contentLength: String(row.content || '').length,
-                  matchedCacheKey: match?.key || '',
-                  matchType,
-                  matchedPartsLength: parts.length,
-                  matchedPartTypes: parts.map((part) => part.type)
-                };
-              });
-            setHistoryDebug({
-              rowCount: history.length,
-              exactHits: rows.filter((row) => row.matchType === 'exact').length,
-              fallbackHits: rows.filter((row) => row.matchType === 'fallback').length,
-              missCount: rows.filter((row) => row.matchType === 'none').length,
-              rows
-            });
-          }
-          clearTypewriterQueue();
-          setMessages(
-            history
-              .map((message) => normalizeHistoryMessage(
-                message,
-                { showThinking: settings.showThinking },
-                cachedMap,
-                cachedMessages,
-                usedCacheKeys
-              ))
-              .filter((message) => !isEmptyAssistantShell(message))
-          );
+          const historyMessages = normalizeHistoryRows(history);
+          setMessages((prev) => mergeHistoryIntoCurrentMessages(prev, historyMessages));
           return;
         }
         if (payload.type === 'typing_indicator') {
@@ -1418,6 +1498,28 @@ function App() {
     clearTypewriterQueue();
     setMessages((data.messages || []).flatMap((message) => normalizeHistoryMessage(message, { showThinking: settings.showThinking })));
     return data;
+  }
+
+  async function mergeLatestHistory(conversationId = activeConversationId) {
+    const data = await apiGet(
+      settings.serverUrl,
+      `/api/history?session_id=${encodeURIComponent(settings.sessionId)}&conversation_id=${encodeURIComponent(conversationId)}&limit=80`,
+      settings.token
+    );
+    if (conversationId !== activeConversationRef.current) return data;
+    const historyMessages = normalizeHistoryRows(data.messages || []);
+    setMessages((prev) => mergeHistoryIntoCurrentMessages(prev, historyMessages));
+    return data;
+  }
+
+  function scheduleSendHistoryFallback(conversationId = activeConversationId) {
+    historyFallbackTimersRef.current.forEach((timer) => clearTimeout(timer));
+    historyFallbackTimersRef.current = [2000, 6000].map((delay) => setTimeout(() => {
+      if (conversationId !== activeConversationRef.current) return;
+      mergeLatestHistory(conversationId).catch((err) => {
+        setError(err.message);
+      });
+    }, delay));
   }
 
   async function createNewConversation() {
@@ -1554,6 +1656,7 @@ function App() {
       attachments: readyAttachments
     };
     wsRef.current.send({ type: 'text', content, meta });
+    scheduleSendHistoryFallback(activeConversationId);
     setMessages((prev) => [...prev, { id: nowId(), type: 'user', content: content || '[附件]', meta, attachments: readyAttachments, ts: Date.now() }]);
     setInput('');
     setAttachments((prev) => {
