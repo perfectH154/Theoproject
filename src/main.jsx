@@ -3435,7 +3435,10 @@ function SettingsSheet({ settings, setSettings, close }) {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/chat/sw.js', { scope: '/chat/' }).catch(() => {});
+    navigator.serviceWorker
+      .register('/chat/sw.js', { scope: '/chat/' })
+      .then((registration) => registration.update())
+      .catch(() => {});
   });
 }
 
