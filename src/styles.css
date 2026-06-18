@@ -2509,6 +2509,13 @@ body {
   padding: 18px 0 24px;
 }
 
+.quote-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .quote-label,
 .counter-label,
 .stat-key,
@@ -2519,11 +2526,54 @@ body {
   text-transform: uppercase;
 }
 
+.quote-edit-button,
+.quote-editor-actions button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
 .quote-text {
   margin-top: 10px;
   color: var(--ink);
   font-size: 30px;
   line-height: 1.08;
+}
+
+.quote-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.quote-editor textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: rgba(253, 249, 250, 0.72);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.45;
+  outline: none;
+}
+
+.quote-editor textarea::placeholder {
+  color: var(--ink-mute);
+}
+
+.quote-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.quote-editor-actions button:disabled {
+  color: var(--ink-mute);
 }
 
 .quote-meta {

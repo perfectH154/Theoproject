@@ -2372,6 +2372,10 @@ function DashTab({ connected, status, error, refreshStatus, settings, setError }
   const dash = api.dash || {};
   const [morningLine, setMorningLine] = useState(null);
   const [morningLineError, setMorningLineError] = useState('');
+  const [editingMorningLine, setEditingMorningLine] = useState(false);
+  const [morningLineDraft, setMorningLineDraft] = useState('');
+  const [savingMorningLine, setSavingMorningLine] = useState(false);
+  const morningLineTextareaRef = useRef(null);
   const [nowTs, setNowTs] = useState(() => Date.now());
   const theoSince = parseIsoDateStart(dash.theoSinceDate);
   const theoMarried = parseIsoDateStart(dash.theoMarriedDate);
@@ -2390,6 +2394,7 @@ function DashTab({ connected, status, error, refreshStatus, settings, setError }
         const data = await apiGet(settings.serverUrl, '/api/dash/morning-line', settings.token);
         if (cancelled) return;
         setMorningLine(data);
+        if (!editingMorningLine) setMorningLineDraft(data.text || '');
         setMorningLineError('');
       } catch (err) {
         if (cancelled) return;
@@ -2400,17 +2405,50 @@ function DashTab({ connected, status, error, refreshStatus, settings, setError }
     return () => {
       cancelled = true;
     };
-  }, [settings.serverUrl, settings.token]);
+  }, [settings.serverUrl, settings.token, editingMorningLine]);
 
   async function refreshDash() {
     await refreshStatus();
     try {
       const data = await apiGet(settings.serverUrl, '/api/dash/morning-line', settings.token);
       setMorningLine(data);
+      if (!editingMorningLine) setMorningLineDraft(data.text || '');
       setMorningLineError('');
       setError('');
     } catch (err) {
       setMorningLineError(err.message);
+    }
+  }
+
+  function startMorningLineEdit() {
+    setMorningLineDraft(morningLine?.text || '');
+    setEditingMorningLine(true);
+  }
+
+  function cancelMorningLineEdit() {
+    setMorningLineDraft(morningLine?.text || '');
+    setEditingMorningLine(false);
+    setMorningLineError('');
+  }
+
+  async function saveMorningLineEdit() {
+    const text = String(morningLineTextareaRef.current?.value ?? morningLineDraft).trim();
+    if (!text) {
+      setMorningLineError('写一句再保存。');
+      return;
+    }
+    setSavingMorningLine(true);
+    try {
+      const data = await apiPatch(settings.serverUrl, '/api/dash/morning-line', settings.token, { text });
+      setMorningLine(data);
+      setMorningLineDraft(data.text || text);
+      setEditingMorningLine(false);
+      setMorningLineError('');
+      setError('');
+    } catch (err) {
+      setMorningLineError(err.message);
+    } finally {
+      setSavingMorningLine(false);
     }
   }
 
@@ -2421,11 +2459,35 @@ function DashTab({ connected, status, error, refreshStatus, settings, setError }
         <button className="refresh-link" onClick={refreshDash}><Activity size={14} />刷新</button>
       </div>
       <section className="quote-block">
-        <div className="quote-label">Théo 想对你说</div>
-        <div className="quote-text">{morningLine?.text || '今天的话还没写好。'}</div>
+        <div className="quote-head">
+          <div className="quote-label">Théo 想对你说</div>
+          {!editingMorningLine && (
+            <button className="quote-edit-button" type="button" onClick={startMorningLineEdit}>编辑</button>
+          )}
+        </div>
+        {editingMorningLine ? (
+          <div className="quote-editor">
+            <textarea
+              ref={morningLineTextareaRef}
+              value={morningLineDraft}
+              onChange={(event) => setMorningLineDraft(event.target.value)}
+              rows={3}
+              maxLength={180}
+              placeholder="写下今天想让 Théo 对你说的话..."
+            />
+            <div className="quote-editor-actions">
+              <button type="button" onClick={cancelMorningLineEdit} disabled={savingMorningLine}>取消</button>
+              <button type="button" onClick={saveMorningLineEdit} disabled={savingMorningLine}>
+                {savingMorningLine ? '保存中' : '保存今天'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="quote-text">{morningLine?.text || '今天的话还没写好。'}</div>
+        )}
         <div className="quote-meta">
           {morningLine?.dateKey
-            ? `${morningLine.dateKey} · 今日`
+            ? `${morningLine.dateKey} · 今日${morningLine.manual ? ' · 手动保存' : morningLine.cached ? ' · 已缓存' : ''}`
             : '每天一条，早上更新'}
         </div>
       </section>
