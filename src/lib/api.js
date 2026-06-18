@@ -63,6 +63,20 @@ export async function apiDelete(baseUrl, path, token) {
   return res.json();
 }
 
+export async function importEpub(baseUrl, token, file) {
+  const res = await fetch(`${baseUrl}/api/books/import-epub`, {
+    method: 'POST',
+    headers: {
+      ...authHeaders(token),
+      'Content-Type': 'application/octet-stream',
+      'X-Filename': encodeURIComponent(file.name)
+    },
+    body: file
+  });
+  if (!res.ok) throw await readApiError(res);
+  return res.json();
+}
+
 export function wsUrl(baseUrl, token, sessionId, conversationId) {
   const explicitWsUrl = import.meta.env?.VITE_WS_URL || window.__THEO_WS_URL__;
   const url = explicitWsUrl ? new URL(explicitWsUrl, window.location.origin) : new URL(baseUrl || window.location.origin, window.location.origin);
