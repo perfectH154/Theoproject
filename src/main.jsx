@@ -1347,7 +1347,13 @@ function App() {
         }
         if (payload.type === 'status') {
           if (payload.content === 'pong') return;
-          if (payload.content === 'done' || payload.content === 'assistant_message_saved') {
+          if (payload.content === 'assistant_message_saved') {
+            finishChatRequest('done');
+            reloadHistory(activeConversationId).catch((err) => {
+              setError(err.message);
+            });
+          }
+          if (payload.content === 'done') {
             finishChatRequest('done');
           }
           if (payload.content === 'error' || payload.content === 'aborted' || payload.content === 'abort_ignored') {
