@@ -2375,6 +2375,7 @@ function DashTab({ connected, status, error, refreshStatus, settings, setError }
   const [editingMorningLine, setEditingMorningLine] = useState(false);
   const [morningLineDraft, setMorningLineDraft] = useState('');
   const [savingMorningLine, setSavingMorningLine] = useState(false);
+  const morningLineTextareaRef = useRef(null);
   const [nowTs, setNowTs] = useState(() => Date.now());
   const theoSince = parseIsoDateStart(dash.theoSinceDate);
   const theoMarried = parseIsoDateStart(dash.theoMarriedDate);
@@ -2431,7 +2432,7 @@ function DashTab({ connected, status, error, refreshStatus, settings, setError }
   }
 
   async function saveMorningLineEdit() {
-    const text = morningLineDraft.trim();
+    const text = String(morningLineTextareaRef.current?.value ?? morningLineDraft).trim();
     if (!text) {
       setMorningLineError('写一句再保存。');
       return;
@@ -2467,6 +2468,7 @@ function DashTab({ connected, status, error, refreshStatus, settings, setError }
         {editingMorningLine ? (
           <div className="quote-editor">
             <textarea
+              ref={morningLineTextareaRef}
               value={morningLineDraft}
               onChange={(event) => setMorningLineDraft(event.target.value)}
               rows={3}
