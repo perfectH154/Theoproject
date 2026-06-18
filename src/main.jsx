@@ -2652,6 +2652,10 @@ function ReadTab({ settings, setError }) {
     ));
   }, [chapter, base, token]);
 
+  const highlightedChapterHtml = useMemo(() => {
+    return applyChapterHighlights(chapterHtml, highlights);
+  }, [chapterHtml, highlights]);
+
   function captureSelection() {
     const sel = window.getSelection?.();
     const text = sel ? String(sel).trim() : '';
@@ -2839,7 +2843,7 @@ function ReadTab({ settings, setError }) {
           onScroll={onScroll}
           onMouseUp={captureSelection}
           onTouchEnd={captureSelection}
-          dangerouslySetInnerHTML={{ __html: chapterLoading ? '<p>加载中…</p>' : chapterHtml }}
+          dangerouslySetInnerHTML={{ __html: chapterLoading ? '<p>加载中…</p>' : highlightedChapterHtml }}
         />
       </div>
 
@@ -2911,6 +2915,54 @@ function ReadTab({ settings, setError }) {
       )}
     </section>
   );
+}
+
+function escapeHighlightRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function applyChapterHighlights(html, highlights) {
+  if (!html || typeof document === 'undefined') return html;
+  const terms = [...new Set((highlights || [])
+    .map((item) => String(item?.text || '').trim())
+    .filter((text) => text.length >= 2))]
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 80);
+  if (!terms.length) return html;
+
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const pattern = new RegExp(`(${terms.map(escapeHighlightRegExp).join('|')})`, 'g');
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest('script, style, mark')) return NodeFilter.FILTER_REJECT;
+      pattern.lastIndex = 0;
+      return pattern.test(node.nodeValue || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+  });
+
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    pattern.lastIndex = 0;
+    const text = node.nodeValue || '';
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+    text.replace(pattern, (match, _g, offset) => {
+      if (offset > lastIndex) fragment.appendChild(document.createTextNode(text.slice(lastIndex, offset)));
+      const mark = document.createElement('mark');
+      mark.className = 'reader-highlight-mark';
+      mark.textContent = match;
+      fragment.appendChild(mark);
+      lastIndex = offset + match.length;
+      return match;
+    });
+    if (lastIndex < text.length) fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    node.parentNode?.replaceChild(fragment, node);
+  });
+
+  return template.innerHTML;
 }
 
 function extractOmbreText(payload) {

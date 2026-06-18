@@ -1826,8 +1826,10 @@ button {
 }
 
 .reader {
-  color: #F7EFF2;
-  background: #1d1b22;
+  color: #5C4033;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 251, 0.74), rgba(253, 249, 250, 0.9)),
+    rgba(253, 249, 250, 0.7);
 }
 
 .reader-top {
@@ -1837,13 +1839,18 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin: -18px -18px 18px;
-  padding: 16px 18px;
+  gap: 10px;
+  min-height: 50px;
+  margin: -18px -18px 8px;
+  padding: 7px 18px;
   border: 0;
-  border-radius: 0 0 22px 22px;
-  color: #F7EFF2;
-  background: rgba(29, 27, 34, 0.82);
+  border-bottom: 1px solid rgba(184, 144, 154, 0.18);
+  border-radius: 0;
+  color: #5C4033;
+  background: rgba(255, 250, 251, 0.74);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 8px 24px rgba(120, 84, 96, 0.08);
 }
 
 .reader-top span {
@@ -1852,16 +1859,16 @@ button {
 
 .reader-top strong {
   overflow: hidden;
-  color: #F7EFF2;
-  font-size: 18px;
+  color: #5C4033;
+  font-size: 17px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .reader-upload {
   position: relative;
-  color: #F7EFF2;
-  background: rgba(188, 104, 142, 0.72);
+  color: #9E5973;
+  background: #F2DCE5;
 }
 
 .reader-upload input {
@@ -1871,15 +1878,15 @@ button {
 }
 
 .reader-page {
-  min-height: 72vh;
-  padding: 6px 6px 120px;
+  min-height: 100%;
+  padding: 8px 8px 96px;
   border: 0;
   border-radius: 0;
-  color: #F7EFF2;
-  background: transparent;
+  color: #5C4033;
+  background: rgba(255, 250, 251, 0.32);
   box-shadow: none;
-  font-size: 20px;
-  line-height: 1.85;
+  font-size: 19px;
+  line-height: 1.82;
   white-space: pre-wrap;
 }
 
@@ -2939,12 +2946,12 @@ body {
 .reader-panel-toggle {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border: 0;
   border-radius: 12px;
-  color: #F7EFF2;
-  background: rgba(188, 104, 142, 0.28);
+  color: #9E5973;
+  background: #F2DCE5;
 }
 .reader-title-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .reader-title-wrap strong { overflow: hidden; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
@@ -2960,22 +2967,29 @@ body {
   white-space: normal;
 }
 .reader-chapter img { max-width: 100%; height: auto; border-radius: 10px; }
-.reader-chapter h1, .reader-chapter h2, .reader-chapter h3 { color: #F7EFF2; line-height: 1.4; }
+.reader-chapter h1, .reader-chapter h2, .reader-chapter h3 { color: #5C4033; line-height: 1.4; }
 
 .reader-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 4px calc(10px + var(--safe-bottom));
+  min-height: 46px;
+  padding: 6px 4px calc(6px + var(--safe-bottom));
   color: #B1979F;
+  border-top: 1px solid rgba(184, 144, 154, 0.14);
+  background: rgba(255, 250, 251, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 .reader-nav button {
-  padding: 8px 16px;
+  min-width: 86px;
+  padding: 7px 14px;
   border: 0;
   border-radius: 12px;
-  color: #F7EFF2;
-  background: rgba(188, 104, 142, 0.5);
+  color: #9E5973;
+  background: #F2DCE5;
+  font-weight: 700;
 }
 .reader-nav button:disabled { opacity: 0.4; }
 
@@ -2986,15 +3000,18 @@ body {
   gap: 6px;
   padding: 6px;
   border-radius: 12px;
-  background: #2b2832;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  background: rgba(255, 250, 251, 0.92);
+  border: 1px solid rgba(184, 144, 154, 0.18);
+  box-shadow: 0 10px 30px rgba(120, 84, 96, 0.16);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 .select-popup button {
   padding: 7px 14px;
   border: 0;
   border-radius: 9px;
-  color: #F7EFF2;
-  background: rgba(188, 104, 142, 0.78);
+  color: #9E5973;
+  background: #F2DCE5;
   font-size: 14px;
 }
 
@@ -3007,9 +3024,13 @@ body {
   display: flex;
   flex-direction: column;
   width: min(420px, 92vw);
-  padding: calc(12px + var(--safe-top)) 12px calc(12px + var(--safe-bottom));
-  background: #211f28;
-  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.5);
+  padding: calc(10px + var(--safe-top)) 12px calc(10px + var(--safe-bottom));
+  color: #5C4033;
+  background: rgba(255, 250, 251, 0.9);
+  border-left: 1px solid rgba(184, 144, 154, 0.18);
+  box-shadow: -12px 0 36px rgba(120, 84, 96, 0.16);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 .reader-panel-tabs { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
 .reader-panel-tabs button {
@@ -3020,14 +3041,14 @@ body {
   background: rgba(188, 104, 142, 0.12);
   font-size: 13px;
 }
-.reader-panel-tabs button.active { color: #F7EFF2; background: rgba(188, 104, 142, 0.5); }
+.reader-panel-tabs button.active { color: #8E5870; background: #F2DCE5; }
 .reader-panel-close { margin-left: auto; background: transparent !important; color: #B1979F; }
 
 .reader-chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .reader-chat-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
 .reader-bubble { max-width: 86%; padding: 9px 12px; border-radius: 14px; font-size: 15px; line-height: 1.6; white-space: pre-wrap; }
-.reader-bubble.me { align-self: flex-end; color: #fff; background: rgba(188, 104, 142, 0.7); }
-.reader-bubble.theo { align-self: flex-start; color: #F7EFF2; background: rgba(255, 255, 255, 0.08); }
+.reader-bubble.me { align-self: flex-end; color: #FFF8FA; background: rgba(188, 104, 142, 0.72); }
+.reader-bubble.theo { align-self: flex-start; color: #5C4033; background: rgba(255, 250, 251, 0.78); border: 1px solid rgba(255, 255, 255, 0.48); }
 .reader-busy-bubble {
   display: flex;
   gap: 10px;
@@ -3042,22 +3063,29 @@ body {
 }
 
 .reader-busy-bubble button {
-  border: 1px solid rgba(247, 239, 242, 0.24);
+  border: 1px solid rgba(188, 104, 142, 0.22);
   border-radius: 999px;
   padding: 4px 9px;
-  color: #F7EFF2;
-  background: rgba(188, 104, 142, 0.42);
+  color: #9E5973;
+  background: #F2DCE5;
   font-size: 12px;
 }
 .reader-chat-input { display: flex; gap: 8px; padding-top: 8px; }
-.reader-chat-input input { flex: 1; padding: 10px 12px; border: 0; border-radius: 12px; color: #F7EFF2; background: rgba(255, 255, 255, 0.08); }
-.reader-chat-input button { width: 42px; border: 0; border-radius: 12px; color: #fff; background: rgba(188, 104, 142, 0.78); display: grid; place-items: center; }
+.reader-chat-input input { flex: 1; padding: 10px 12px; border: 1px solid rgba(184, 144, 154, 0.16); border-radius: 12px; color: #5C4033; background: rgba(255, 255, 255, 0.6); }
+.reader-chat-input button { width: 42px; border: 0; border-radius: 12px; color: #9E5973; background: #F2DCE5; display: grid; place-items: center; }
 .reader-chat-input button:disabled { opacity: 0.4; }
 
 .reader-notes { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 6px; }
-.reader-notes textarea { flex: 1; resize: none; padding: 12px; border: 0; border-radius: 12px; color: #F7EFF2; background: rgba(255, 255, 255, 0.06); font-size: 15px; line-height: 1.7; }
+.reader-notes textarea { flex: 1; resize: none; padding: 12px; border: 1px solid rgba(184, 144, 154, 0.16); border-radius: 12px; color: #5C4033; background: rgba(255, 255, 255, 0.58); font-size: 15px; line-height: 1.7; }
 
 .reader-highlights { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-.reader-highlight-item { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); }
+.reader-highlight-item { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.58); border: 1px solid rgba(184, 144, 154, 0.14); }
 .reader-highlight-item span { flex: 1; font-size: 14px; line-height: 1.5; }
 .reader-highlight-item button { border: 0; background: transparent; color: #c98aa3; }
+
+.reader-highlight-mark {
+  color: inherit;
+  background: linear-gradient(180deg, transparent 48%, rgba(233, 197, 208, 0.86) 48%);
+  border-bottom: 1px solid rgba(158, 89, 115, 0.5);
+  border-radius: 2px;
+}
