@@ -1325,7 +1325,6 @@ function App() {
       setStatus({ type: 'status', content: 'api_status', meta: data });
       setError('');
     } catch (err) {
-      if (controller.signal.aborted || err.name === 'AbortError') return;
       setError(err.message);
     }
   }
@@ -2780,6 +2779,7 @@ function ReadTab({ settings, setError }) {
       }
       setChat((prev) => [...prev, { role: 'theo', text: '（Théo 想了很久还没说完，先歇会儿，等会再问问看。）' }]);
     } catch (err) {
+      if (controller.signal.aborted || err.name === 'AbortError') return;
       setChat((prev) => [...prev, { role: 'theo', text: `（出错了：${err.message}）` }]);
     } finally {
       if (chatJobRef.current?.controller === controller) chatJobRef.current = null;
