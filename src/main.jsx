@@ -989,6 +989,14 @@ function disableAssistantTypewriter() {
   }
 }
 
+function enableAssistantTypewriter() {
+  try {
+    return localStorage.getItem('debug.enableAssistantTypewriter') === '1' && !disableAssistantTypewriter();
+  } catch {
+    return false;
+  }
+}
+
 function App() {
   const [settings, setSettings] = useState(loadSettings);
   const [tab, setTab] = useState('chat');
@@ -1177,7 +1185,7 @@ function App() {
       const speed = getTypingSpeed(settingsRef.current.typingSpeed);
       const incomingParts = normalizeStructuredParts(incoming.parts, incoming.content);
       const textPart = incomingParts.find((part) => part.type === 'text' && part.content);
-      const useTypewriter = Boolean(textPart && speed.delay !== 0 && !disableAssistantTypewriter());
+      const useTypewriter = Boolean(textPart && speed.delay !== 0 && enableAssistantTypewriter());
       const preparedIncoming = useTypewriter
         ? createStructuredMessage(incoming, {
           parts: incomingParts.map((part) => (
@@ -2103,7 +2111,7 @@ function ChatTab({
         />
         <button
           className="send-button text-button"
-          type={activeRequest ? 'button' : 'submit'}
+          type="button"
           onPointerDown={(event) => {
             // iOS Safari 有时在 textarea 聚焦时第一下只处理焦点；pointerdown 让发送更可靠。
             event.preventDefault();
