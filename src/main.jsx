@@ -1695,7 +1695,6 @@ function App() {
       wsRef.current?.reconnect();
       return false;
     }
-    scheduleSendHistoryFallback(activeConversationId);
     setMessages((prev) => [...prev, { id: nowId(), type: 'user', content: content || '[附件]', meta, attachments: readyAttachments, ts: Date.now() }]);
     setInput('');
     setAttachments((prev) => {
