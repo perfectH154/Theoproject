@@ -2526,6 +2526,7 @@ function ReadTab({ settings, setError }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTab, setPanelTab] = useState('theo');
   const [popup, setPopup] = useState(null);
+  const highlightTouchTimer = useRef(null);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [chatBusy, setChatBusy] = useState(false);
@@ -2557,6 +2558,7 @@ function ReadTab({ settings, setError }) {
   useEffect(() => () => {
     clearTimeout(notesTimer.current);
     clearTimeout(progressTimer.current);
+    clearTimeout(highlightTouchTimer.current);
     chatJobRef.current?.controller?.abort();
     chatJobRef.current = null;
   }, []);
@@ -2656,6 +2658,9 @@ function ReadTab({ settings, setError }) {
     return applyChapterHighlights(chapterHtml, highlights);
   }, [chapterHtml, highlights]);
 
+  const findHighlightByText = (text) => highlights.find((h) => h.text === text);
+  const findHighlightById = (id) => highlights.find((h) => h.id === id);
+
   function captureSelection() {
     const sel = window.getSelection?.();
     const text = sel ? String(sel).trim() : '';
@@ -2675,6 +2680,39 @@ function ReadTab({ settings, setError }) {
     setPopup({ x, y, text });
   }
 
+  function showHighlightPopup(highlight, x, y) {
+    if (!highlight) return;
+    setPopup({
+      mode: 'highlight',
+      x: x || window.innerWidth / 2,
+      y: y || window.innerHeight / 2,
+      text: highlight.text,
+      highlightId: highlight.id,
+      note: highlight.note || ''
+    });
+  }
+
+  function onChapterPointer(event) {
+    const mark = event.target?.closest?.('.reader-highlight-mark');
+    if (!mark) return;
+    const highlight = findHighlightById(mark.dataset.highlightId);
+    if (!highlight) return;
+    event.preventDefault();
+    const rect = mark.getBoundingClientRect();
+    showHighlightPopup(highlight, rect.left + rect.width / 2, rect.top);
+  }
+
+  function onChapterTouchStart(event) {
+    const mark = event.target?.closest?.('.reader-highlight-mark');
+    clearTimeout(highlightTouchTimer.current);
+    if (!mark) return;
+    const id = mark.dataset.highlightId;
+    const rect = mark.getBoundingClientRect();
+    highlightTouchTimer.current = setTimeout(() => {
+      showHighlightPopup(findHighlightById(id), rect.left + rect.width / 2, rect.top);
+    }, 420);
+  }
+
   async function putJson(path, body) {
     await fetch(`${base}${path}`, {
       method: 'PUT',
@@ -2692,6 +2730,22 @@ function ReadTab({ settings, setError }) {
 
   function removeHighlight(id) {
     const next = highlights.filter((h) => h.id !== id);
+    setHighlights(next);
+    if (book) putJson(`/api/books/${encodeURIComponent(book.bookId)}/highlights/${chapterNum}`, { highlights: next }).catch(() => {});
+  }
+
+  function annotateHighlight(id, fallbackText = '') {
+    const existing = findHighlightById(id) || findHighlightByText(fallbackText);
+    const note = window.prompt('给这条划线写批注：', existing?.note || '');
+    if (note === null) return;
+    let next;
+    if (existing) {
+      next = highlights.map((h) => h.id === existing.id ? { ...h, note: note.trim(), updatedAt: Date.now() } : h);
+    } else if (fallbackText) {
+      next = [...highlights, { id: nowId(), text: fallbackText, note: note.trim(), createdAt: Date.now(), updatedAt: Date.now() }];
+    } else {
+      return;
+    }
     setHighlights(next);
     if (book) putJson(`/api/books/${encodeURIComponent(book.bookId)}/highlights/${chapterNum}`, { highlights: next }).catch(() => {});
   }
@@ -2841,8 +2895,15 @@ function ReadTab({ settings, setError }) {
           className="reader-page reader-chapter"
           ref={contentRef}
           onScroll={onScroll}
+          onClick={onChapterPointer}
+          onContextMenu={onChapterPointer}
+          onTouchStart={onChapterTouchStart}
+          onTouchMove={() => clearTimeout(highlightTouchTimer.current)}
           onMouseUp={captureSelection}
-          onTouchEnd={captureSelection}
+          onTouchEnd={(event) => {
+            clearTimeout(highlightTouchTimer.current);
+            captureSelection(event);
+          }}
           dangerouslySetInnerHTML={{ __html: chapterLoading ? '<p>加载中…</p>' : highlightedChapterHtml }}
         />
       </div>
@@ -2855,8 +2916,25 @@ function ReadTab({ settings, setError }) {
 
       {popup && (
         <div className="select-popup" style={{ left: Math.max(8, Math.min(popup.x - 80, window.innerWidth - 168)), top: Math.max(8, popup.y - 48) }}>
-          <button onClick={() => { addHighlight(popup.text); setPopup(null); }}>划线</button>
-          <button onClick={() => { askTheo(popup.text, ''); setPopup(null); }}>问 Théo</button>
+          {popup.mode === 'highlight' && (
+            <div className="select-popup-note">{popup.note ? popup.note : '还没有批注。'}</div>
+          )}
+          {popup.mode === 'highlight' ? (
+            <>
+              <button onClick={() => { annotateHighlight(popup.highlightId, popup.text); setPopup(null); }}>批注</button>
+              <button onClick={() => { removeHighlight(popup.highlightId); setPopup(null); }}>取消划线</button>
+            </>
+          ) : (
+            <>
+              {findHighlightByText(popup.text) ? (
+                <button onClick={() => { removeHighlight(findHighlightByText(popup.text).id); setPopup(null); }}>取消划线</button>
+              ) : (
+                <button onClick={() => { addHighlight(popup.text); setPopup(null); }}>划线</button>
+              )}
+              <button onClick={() => { annotateHighlight(findHighlightByText(popup.text)?.id, popup.text); setPopup(null); }}>批注</button>
+              <button onClick={() => { askTheo(popup.text, ''); setPopup(null); }}>问 Théo</button>
+            </>
+          )}
         </div>
       )}
 
@@ -2905,7 +2983,11 @@ function ReadTab({ settings, setError }) {
               {highlights.length === 0 && <p className="settings-note">还没有划线。选中句子点「划线」。</p>}
               {highlights.map((h) => (
                 <div key={h.id} className="reader-highlight-item">
-                  <span>{h.text}</span>
+                  <span>
+                    {h.text}
+                    {h.note && <em>{h.note}</em>}
+                  </span>
+                  <button onClick={() => annotateHighlight(h.id, h.text)}>批注</button>
                   <button onClick={() => removeHighlight(h.id)}><Trash2 size={14} /></button>
                 </div>
               ))}
@@ -2923,9 +3005,11 @@ function escapeHighlightRegExp(value) {
 
 function applyChapterHighlights(html, highlights) {
   if (!html || typeof document === 'undefined') return html;
-  const terms = [...new Set((highlights || [])
-    .map((item) => String(item?.text || '').trim())
-    .filter((text) => text.length >= 2))]
+  const items = (highlights || [])
+    .map((item) => ({ ...item, text: String(item?.text || '').trim() }))
+    .filter((item) => item.text.length >= 2);
+  const byText = new Map(items.map((item) => [item.text, item]));
+  const terms = [...new Set(items.map((item) => item.text))]
     .sort((a, b) => b.length - a.length)
     .slice(0, 80);
   if (!terms.length) return html;
@@ -2953,6 +3037,8 @@ function applyChapterHighlights(html, highlights) {
       if (offset > lastIndex) fragment.appendChild(document.createTextNode(text.slice(lastIndex, offset)));
       const mark = document.createElement('mark');
       mark.className = 'reader-highlight-mark';
+      const highlight = byText.get(match);
+      if (highlight?.id) mark.dataset.highlightId = highlight.id;
       mark.textContent = match;
       fragment.appendChild(mark);
       lastIndex = offset + match.length;
