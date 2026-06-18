@@ -1175,16 +1175,17 @@ function App() {
     if (!incoming) return;
     if (incoming.type === 'assistant') {
       const speed = getTypingSpeed(settingsRef.current.typingSpeed);
-      const textPart = normalizeStructuredParts(incoming.parts, incoming.content).find((part) => part.type === 'text' && part.content);
+      const incomingParts = normalizeStructuredParts(incoming.parts, incoming.content);
+      const textPart = incomingParts.find((part) => part.type === 'text' && part.content);
       const useTypewriter = Boolean(textPart && speed.delay !== 0 && !disableAssistantTypewriter());
       const preparedIncoming = useTypewriter
         ? createStructuredMessage(incoming, {
-          parts: normalizeStructuredParts(incoming.parts, incoming.content).map((part) => (
+          parts: incomingParts.map((part) => (
             part.id === textPart.id ? { ...part, content: '' } : part
           )),
           meta: { ...(incoming.meta || {}), typing: true }
         })
-        : incoming;
+        : createStructuredMessage(incoming, { parts: incomingParts });
       setMessages((prev) => {
         const next = mergeIncomingMessage(prev, preparedIncoming, activeConversationId);
         if (useTypewriter) {
