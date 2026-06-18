@@ -2644,13 +2644,39 @@ function ReadTab({ settings, setError }) {
     setPanelTab('theo');
     setChat((prev) => [...prev, { role: 'me', text: selection ? `「${selection}」\n${q}` : q }]);
     setChatBusy(true);
+    const id = encodeURIComponent(book.bookId);
     try {
-      const data = await apiPost(base, `/api/books/${encodeURIComponent(book.bookId)}/chat`, token, {
+      const start = await apiPost(base, `/api/books/${id}/chat`, token, {
         chapterNumber: chapterNum,
         selection,
         content: q
       });
-      setChat((prev) => [...prev, { role: 'theo', text: data.text || '[无回复]' }]);
+      const jobId = start.jobId;
+      if (!jobId) throw new Error(start.error || '启动失败');
+      // 轮询结果：Claude 读整章可能很久，但每次轮询都很快，不会触发 Cloudflare 524 超时。
+      const deadline = Date.now() + 5 * 60 * 1000;
+      let unknownTries = 0;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2500));
+        let r;
+        try {
+          r = await apiGet(base, `/api/books/${id}/chat-result/${jobId}`, token);
+        } catch {
+          continue;
+        }
+        if (r.status === 'done') {
+          setChat((prev) => [...prev, { role: 'theo', text: r.text || '[无回复]' }]);
+          return;
+        }
+        if (r.status === 'error') {
+          setChat((prev) => [...prev, { role: 'theo', text: `（出错了：${r.error || '未知错误'}）` }]);
+          return;
+        }
+        if (r.status === 'unknown' && (unknownTries += 1) > 3) {
+          throw new Error('任务丢失（服务可能重启了）');
+        }
+      }
+      setChat((prev) => [...prev, { role: 'theo', text: '（Théo 想了很久还没说完，先歇会儿，等会再问问看。）' }]);
     } catch (err) {
       setChat((prev) => [...prev, { role: 'theo', text: `（出错了：${err.message}）` }]);
     } finally {
