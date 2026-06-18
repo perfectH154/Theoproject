@@ -981,6 +981,14 @@ function sanitizeMessagesForCache(messages) {
     .map((message) => toStoredMessage(message));
 }
 
+function disableAssistantTypewriter() {
+  try {
+    return localStorage.getItem('debug.disableAssistantTypewriter') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function App() {
   const [settings, setSettings] = useState(loadSettings);
   const [tab, setTab] = useState('chat');
@@ -1003,7 +1011,9 @@ function App() {
   const settingsRef = useRef(settings);
   const activeConversationRef = useRef(activeConversationId);
   const attachmentsRef = useRef(attachments);
+  const messagesRef = useRef(messages);
   const typewriterRef = useRef({ queue: [], running: false, runId: 0 });
+  const pendingTypewriterJobsRef = useRef([]);
   const cacheSaveTimerRef = useRef(null);
   const historyFallbackTimersRef = useRef([]);
   const skipNextAutoScrollRef = useRef(false);
@@ -1021,6 +1031,10 @@ function App() {
   useEffect(() => {
     attachmentsRef.current = attachments;
   }, [attachments]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => () => {
     attachmentsRef.current.forEach(cleanupAttachmentPreview);
@@ -1052,6 +1066,31 @@ function App() {
     typewriterRef.current.queue = [];
     typewriterRef.current.running = false;
     typewriterRef.current.runId += 1;
+  }
+
+  function hasPendingTypewriterForMessage(messageId) {
+    return Boolean(messageId && (
+      typewriterRef.current.queue.some((item) => item.messageId === messageId)
+      || pendingTypewriterJobsRef.current.some((item) => item.messageId === messageId)
+    ));
+  }
+
+  function enqueueTypewriterJob(job) {
+    if (!job?.messageId || !job?.partId || !job.fullText) return;
+    const key = `${job.messageId}:${job.partId}:${job.fullText}`;
+    if (typewriterRef.current.queue.some((item) => item.key === key)) return;
+    typewriterRef.current.queue.push({
+      ...job,
+      key,
+      chars: Array.from(job.fullText),
+      index: 0
+    });
+    pumpTypewriter();
+  }
+
+  function flushPendingTypewriterJobs() {
+    const jobs = pendingTypewriterJobsRef.current.splice(0);
+    jobs.forEach(enqueueTypewriterJob);
   }
 
   function pumpTypewriter() {
@@ -1086,6 +1125,11 @@ function App() {
         pumpTypewriter();
         return;
       }
+      console.debug('[typewriter pump]', {
+        messageId: active.messageId,
+        exists: messagesRef.current?.some((message) => message.id === active.messageId),
+        remaining: active.chars.length - active.index
+      });
       const chunk = active.chars.slice(active.index, active.index + speed.take).join('');
       active.index += speed.take;
       const done = active.index >= active.chars.length;
@@ -1132,7 +1176,8 @@ function App() {
     if (incoming.type === 'assistant') {
       const speed = getTypingSpeed(settingsRef.current.typingSpeed);
       const textPart = normalizeStructuredParts(incoming.parts, incoming.content).find((part) => part.type === 'text' && part.content);
-      const preparedIncoming = textPart && speed.delay !== 0
+      const useTypewriter = Boolean(textPart && speed.delay !== 0 && !disableAssistantTypewriter());
+      const preparedIncoming = useTypewriter
         ? createStructuredMessage(incoming, {
           parts: normalizeStructuredParts(incoming.parts, incoming.content).map((part) => (
             part.id === textPart.id ? { ...part, content: '' } : part
@@ -1140,29 +1185,71 @@ function App() {
           meta: { ...(incoming.meta || {}), typing: true }
         })
         : incoming;
+      setMessages((prev) => {
+        const next = mergeIncomingMessage(prev, preparedIncoming, activeConversationId);
+        if (useTypewriter) {
+          const conversationId = preparedIncoming.meta?.conversation_id || activeConversationId;
+          const candidates = [...next].reverse().filter((message) => (
+            message.type === 'assistant'
+            && (message.meta?.conversation_id || activeConversationId) === conversationId
+          ));
+          const actualTarget = candidates.find((message) => (
+            normalizeStructuredParts(message.parts, message.content).some((part) => part.id === textPart.id)
+          ))
+            || candidates.find((message) => message.id === preparedIncoming.id)
+            || candidates.find((message) => message.meta?.typing)
+            || candidates.find((message) => message.meta?.streamingTurn)
+            || null;
+          const effectiveMessageId = actualTarget?.id || null;
+          const existsInNext = Boolean(effectiveMessageId && next.some((message) => message.id === effectiveMessageId));
+          console.debug('[appendIncomingMessages]', {
+            incomingId: preparedIncoming.id,
+            resolvedMessageId: effectiveMessageId,
+            existsInNext,
+            useTypewriter
+          });
+          if (!existsInNext) {
+            console.warn('[typewriter] resolved missing message id', {
+              effectiveMessageId,
+              incomingId: preparedIncoming.id
+            });
+          } else {
+            pendingTypewriterJobsRef.current.push({
+              messageId: effectiveMessageId,
+              partId: textPart.id,
+              fullText: textPart.content
+            });
+          }
+        } else {
+          console.debug('[appendIncomingMessages]', {
+            incomingId: preparedIncoming.id,
+            resolvedMessageId: preparedIncoming.id,
+            existsInNext: next.some((message) => message.id === preparedIncoming.id),
+            useTypewriter
+          });
+        }
+        return next;
+      });
 
-      setMessages((prev) => mergeIncomingMessage(prev, preparedIncoming, activeConversationId));
-
-      if (textPart && speed.delay !== 0) {
-        const existingTarget = [...messages].reverse().find((message) => (
-          message.type === 'assistant'
-          && message.meta?.streamingTurn
-          && (message.meta?.conversation_id || activeConversationId) === (preparedIncoming.meta?.conversation_id || activeConversationId)
-        ));
-        const effectiveMessageId = existingTarget?.id || preparedIncoming.id;
-        typewriterRef.current.queue.push({
-          messageId: effectiveMessageId,
-          partId: textPart.id,
-          fullText: textPart.content,
-          chars: Array.from(textPart.content),
-          index: 0
-        });
-        pumpTypewriter();
+      window.setTimeout(flushPendingTypewriterJobs, 0);
+      if (payloadDebugEnabled()) {
+        console.debug('[appendIncomingMessages:messages]', messagesRef.current.length);
+      }
+      if (textPart && useTypewriter === false && disableAssistantTypewriter()) {
+        console.debug('[appendIncomingMessages] typewriter disabled by debug flag');
       }
       return;
     }
 
     setMessages((prev) => mergeIncomingMessage(prev, incoming, activeConversationId));
+  }
+
+  function payloadDebugEnabled() {
+    try {
+      return localStorage.getItem('debug.theoVerbose') === '1';
+    } catch {
+      return false;
+    }
   }
 
   function normalizeHistoryRows(history) {
@@ -1236,6 +1323,9 @@ function App() {
       },
       onMessage: (event) => {
         const payload = JSON.parse(event.data);
+        if (payload.type === 'text') {
+          console.debug('[ws text]', payload.type, typeof payload.content === 'string' ? payload.content.length : 0);
+        }
         if (payload.type === 'status' && payload.content === 'history') {
           const history = payload.meta.messages || [];
           const historyMessages = normalizeHistoryRows(history);
@@ -1498,13 +1588,17 @@ function App() {
     if (current?.timeout) clearTimeout(current.timeout);
     activeRequestRef.current = null;
     setActiveRequest(null);
+    console.debug('[finishChatRequest]', {
+      reason,
+      pendingTypewriterCount: typewriterRef.current.queue.length + pendingTypewriterJobsRef.current.length
+    });
     setMessages((prev) => prev
       .map((message) => (
         deriveMessageRole(message) === 'assistant' && message.meta?.streamingTurn
           ? closeThinkingAndStopStreaming(message, reason)
           : message
       ))
-      .filter((message) => !isEmptyAssistantShell(message)));
+      .filter((message) => !isEmptyAssistantShell(message) || hasPendingTypewriterForMessage(message.id)));
   }
 
   function startChatRequest(requestId, conversationId) {
