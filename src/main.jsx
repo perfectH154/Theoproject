@@ -646,6 +646,18 @@ function normalizeMessage(raw, options = {}) {
     });
   }
 
+  const serverParts = Array.isArray(raw.parts)
+    ? raw.parts
+    : (Array.isArray(raw.meta?.parts) ? raw.meta.parts : null);
+  if (serverParts) {
+    return createStructuredMessage(base, {
+      type: raw.type === 'text' ? 'assistant' : (raw.type || 'assistant'),
+      role: raw.type === 'user' ? 'user' : 'assistant',
+      parts: normalizeStructuredParts(serverParts, raw.content),
+      meta: { ...base.meta, serverParts: true }
+    });
+  }
+
   const parsed = tryParseJson(raw.content);
   if (Array.isArray(raw.blocks)) {
     return createStructuredMessage(base, {
