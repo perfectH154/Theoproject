@@ -3028,6 +3028,27 @@ body {
 .reader-bubble { max-width: 86%; padding: 9px 12px; border-radius: 14px; font-size: 15px; line-height: 1.6; white-space: pre-wrap; }
 .reader-bubble.me { align-self: flex-end; color: #fff; background: rgba(188, 104, 142, 0.7); }
 .reader-bubble.theo { align-self: flex-start; color: #F7EFF2; background: rgba(255, 255, 255, 0.08); }
+.reader-busy-bubble {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.reader-busy-bubble span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.reader-busy-bubble button {
+  border: 1px solid rgba(247, 239, 242, 0.24);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: #F7EFF2;
+  background: rgba(188, 104, 142, 0.42);
+  font-size: 12px;
+}
 .reader-chat-input { display: flex; gap: 8px; padding-top: 8px; }
 .reader-chat-input input { flex: 1; padding: 10px 12px; border: 0; border-radius: 12px; color: #F7EFF2; background: rgba(255, 255, 255, 0.08); }
 .reader-chat-input button { width: 42px; border: 0; border-radius: 12px; color: #fff; background: rgba(188, 104, 142, 0.78); display: grid; place-items: center; }

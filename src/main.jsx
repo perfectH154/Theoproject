@@ -1325,6 +1325,7 @@ function App() {
       setStatus({ type: 'status', content: 'api_status', meta: data });
       setError('');
     } catch (err) {
+      if (controller.signal.aborted || err.name === 'AbortError') return;
       setError(err.message);
     }
   }
@@ -2534,6 +2535,7 @@ function ReadTab({ settings, setError }) {
   const notesTimer = useRef(null);
   const restoreScrollRef = useRef(0);
   const progressTimer = useRef(null);
+  const chatJobRef = useRef(null);
 
   const loadBooks = async () => {
     if (!token) return;
@@ -2556,6 +2558,8 @@ function ReadTab({ settings, setError }) {
   useEffect(() => () => {
     clearTimeout(notesTimer.current);
     clearTimeout(progressTimer.current);
+    chatJobRef.current?.controller?.abort();
+    chatJobRef.current = null;
   }, []);
 
   async function onImport(event) {
@@ -2612,7 +2616,7 @@ function ReadTab({ settings, setError }) {
       setChapter(ch);
       setHighlights(hl.highlights || []);
       setNotes(nt.content || '');
-      saveProgress(num, restoreScrollRef.current);
+      saveProgress(num, restoreScrollRef.current, manifest);
       // 等正文渲染好再恢复到上次的阅读位置。
       const target = restoreScrollRef.current;
       setTimeout(() => contentRef.current?.scrollTo?.({ top: target || 0 }), 60);
@@ -2623,12 +2627,12 @@ function ReadTab({ settings, setError }) {
     }
   }
 
-  function saveProgress(num, scrollTop) {
-    if (!book && !num) return;
-    const id = book?.bookId;
+  function saveProgress(num, scrollTop, targetBook = book) {
+    if (!targetBook && !num) return;
+    const id = targetBook?.bookId;
     if (!id) return;
-    const total = book?.totalChapters || 1;
-    apiPost(base, `/api/books/${encodeURIComponent(id)}/progress`, token, {
+    const total = targetBook?.totalChapters || 1;
+    putJson(`/api/books/${encodeURIComponent(id)}/progress`, {
       percentage: Math.round((num / total) * 100),
       lastChapter: num,
       lastLocation: Math.round(scrollTop || 0)
@@ -2699,23 +2703,86 @@ function ReadTab({ settings, setError }) {
     }, 700);
   }
 
+  function stopTheoReading({ silent = false } = {}) {
+    const job = chatJobRef.current;
+    chatJobRef.current = null;
+    job?.controller?.abort();
+    setChatBusy(false);
+    if (job?.bookId && job?.jobId) {
+      fetch(`${base}/api/books/${encodeURIComponent(job.bookId)}/chat-result/${encodeURIComponent(job.jobId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => {});
+    }
+    if (!silent) {
+      setChat((prev) => [...prev, { role: 'theo', text: '（已停止等待，可以重新问我。）' }]);
+    }
+  }
+
+  function waitForPoll(ms, signal) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, ms);
+      signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(new DOMException('Aborted', 'AbortError'));
+      }, { once: true });
+    });
+  }
+
   async function askTheo(selection, question) {
-    if (!book) return;
+    if (!book || chatBusy) return;
     const q = String(question || '').trim() || '帮我讲讲这段。';
     setPanelOpen(true);
     setPanelTab('theo');
     setChat((prev) => [...prev, { role: 'me', text: selection ? `「${selection}」\n${q}` : q }]);
     setChatBusy(true);
+    const id = encodeURIComponent(book.bookId);
+    const controller = new AbortController();
+    chatJobRef.current = { controller, bookId: book.bookId, jobId: null };
+    let jobId = '';
     try {
-      const data = await apiPost(base, `/api/books/${encodeURIComponent(book.bookId)}/chat`, token, {
+      const start = await apiPost(base, `/api/books/${id}/chat`, token, {
         chapterNumber: chapterNum,
         selection,
         content: q
       });
-      setChat((prev) => [...prev, { role: 'theo', text: data.text || '[无回复]' }]);
+      jobId = start.jobId;
+      if (!jobId) throw new Error(start.error || '启动失败');
+      // 轮询结果：Claude 读整章可能很久，但每次轮询都很快，不会触发 Cloudflare 524 超时。
+      chatJobRef.current = { controller, bookId: book.bookId, jobId };
+      const deadline = Date.now() + 5 * 60 * 1000;
+      let unknownTries = 0;
+      while (Date.now() < deadline) {
+        await waitForPoll(2500, controller.signal);
+        let r;
+        try {
+          const res = await fetch(`${base}/api/books/${id}/chat-result/${encodeURIComponent(jobId)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal
+          });
+          if (!res.ok) throw new Error(`${res.status}`);
+          r = await res.json();
+        } catch {
+          continue;
+        }
+        if (controller.signal.aborted || r.status === 'cancelled') return;
+        if (r.status === 'done') {
+          setChat((prev) => [...prev, { role: 'theo', text: r.text || '[无回复]' }]);
+          return;
+        }
+        if (r.status === 'error') {
+          setChat((prev) => [...prev, { role: 'theo', text: `（出错了：${r.error || '未知错误'}）` }]);
+          return;
+        }
+        if (r.status === 'unknown' && (unknownTries += 1) > 3) {
+          throw new Error('任务丢失（服务可能重启了）');
+        }
+      }
+      setChat((prev) => [...prev, { role: 'theo', text: '（Théo 想了很久还没说完，先歇会儿，等会再问问看。）' }]);
     } catch (err) {
       setChat((prev) => [...prev, { role: 'theo', text: `（出错了：${err.message}）` }]);
     } finally {
+      if (chatJobRef.current?.controller === controller) chatJobRef.current = null;
       setChatBusy(false);
     }
   }
@@ -2805,7 +2872,12 @@ function ReadTab({ settings, setError }) {
                 {chat.map((m, i) => (
                   <div key={i} className={`reader-bubble ${m.role}`}>{m.text}</div>
                 ))}
-                {chatBusy && <div className="reader-bubble theo"><Loader2 size={14} className="spin" /> Théo 正在读这一章…</div>}
+                {chatBusy && (
+                  <div className="reader-bubble theo reader-busy-bubble">
+                    <span><Loader2 size={14} className="spin" /> Théo 正在读这一章…</span>
+                    <button type="button" onClick={() => stopTheoReading()}>退出</button>
+                  </div>
+                )}
               </div>
               <form
                 className="reader-chat-input"
