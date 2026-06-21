@@ -406,11 +406,66 @@ function parseFencedContent(content) {
   return parts.length ? parts : [{ type: 'text', text }];
 }
 
-function previewSrcDoc(lang, code) {
-  if (lang === 'svg') {
-    return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;min-height:100%;display:grid;place-items:center;background:#fff7f9;color:#5f4b50}svg{max-width:100%;height:auto}</style></head><body>${code}</body></html>`;
+function extractHtmlFromFences(content) {
+  const text = String(content || '');
+  const fence = /```([a-zA-Z0-9_-]+)?[ \t]*\n([\s\S]*?)```/g;
+  const htmlBlocks = [];
+  let match;
+  while ((match = fence.exec(text))) {
+    const lang = String(match[1] || '').toLowerCase();
+    if (lang === 'html' || lang === 'htm' || lang === 'svg') {
+      htmlBlocks.push({
+        lang: lang === 'svg' ? 'svg' : 'html',
+        code: match[2].replace(/\n$/, '')
+      });
+    }
   }
-  return code;
+  return htmlBlocks;
+}
+
+function looksLikeHtmlDocument(text) {
+  const value = String(text || '').trim();
+  if (!value) return false;
+  if (/```/.test(value)) return false;
+  if (/<!doctype\s+html/i.test(value)) return true;
+  if (/<html[\s>]/i.test(value)) return true;
+  if (/<head[\s>]/i.test(value) || /<body[\s>]/i.test(value)) return true;
+  if (/<style[\s>][\s\S]*<\/style>/i.test(value) || /<script[\s>][\s\S]*<\/script>/i.test(value)) return true;
+  const pairedTags = value.match(/<([a-z][a-z0-9-]*)\b[^>]*>[\s\S]*?<\/\1>/gi) || [];
+  const structuralTags = pairedTags.filter((tag) => (
+    /^<(div|section|article|main|header|footer|nav|button|form|canvas|svg|table|ul|ol|p|h[1-6])\b/i.test(tag)
+  ));
+  return structuralTags.length >= 1 && /[<>]/.test(value);
+}
+
+function extractInlineHtmlPreview(content) {
+  const text = String(content || '').trim();
+  if (!looksLikeHtmlDocument(text)) return null;
+  return {
+    lang: /<svg[\s>]/i.test(text) && !/<html[\s>]/i.test(text) ? 'svg' : 'html',
+    code: text
+  };
+}
+
+function previewSrcDoc(lang, code) {
+  const source = String(code || '');
+  if (lang === 'svg') {
+    return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;min-height:100%;display:grid;place-items:center;background:#fff7f9;color:#5f4b50}svg{max-width:100%;height:auto}</style></head><body>${source}</body></html>`;
+  }
+  if (/<!doctype\s+html/i.test(source) || /<html[\s>]/i.test(source)) return source;
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #fff7f9; color: #5C4033; }
+    body { font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+    * { box-sizing: border-box; }
+  </style>
+</head>
+<body>${source}</body>
+</html>`;
 }
 
 function tryParseJson(value) {
@@ -2297,6 +2352,8 @@ function Message({
 
 function MessageContent({ content }) {
   const parts = parseFencedContent(content);
+  const fencedHtml = extractHtmlFromFences(content);
+  const inlineHtml = fencedHtml.length ? null : extractInlineHtmlPreview(content);
   return (
     <div className="message-content">
       {parts.map((part, index) => {
@@ -2305,19 +2362,35 @@ function MessageContent({ content }) {
         }
         return <CodeBlock key={index} lang={part.lang} code={part.code} />;
       })}
+      {inlineHtml && (
+        <HtmlPreview2
+          lang={inlineHtml.lang}
+          code={inlineHtml.code}
+          title="HTML Preview"
+          defaultOpen
+        />
+      )}
     </div>
   );
 }
 
 function CodeBlock({ lang, code }) {
-  const canPreview = lang === 'html' || lang === 'svg';
+  const normalizedLang = String(lang || '').toLowerCase();
+  const canPreview = normalizedLang === 'html' || normalizedLang === 'htm' || normalizedLang === 'svg';
   return (
     <div className="code-block-wrap">
       <div className="code-block-title">
         <span><Code2 size={14} />{lang || 'code'}</span>
       </div>
       <pre className="message-code"><code>{code}</code></pre>
-      {canPreview && <HtmlPreview lang={lang} code={code} />}
+      {canPreview && (
+        <HtmlPreview2
+          lang={normalizedLang === 'svg' ? 'svg' : 'html'}
+          code={code}
+          title={normalizedLang === 'svg' ? 'SVG Preview' : 'HTML Preview'}
+          defaultOpen
+        />
+      )}
     </div>
   );
 }
@@ -2384,6 +2457,74 @@ function HtmlPreview({ lang, code }) {
             sandbox="allow-scripts allow-same-origin"
             onClick={(event) => event.stopPropagation()}
           />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HtmlPreview2({ lang, code, title = 'HTML Preview', defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [mode, setMode] = useState('preview');
+  const srcDoc = useMemo(() => previewSrcDoc(lang, code), [lang, code]);
+  const label = title || (lang === 'svg' ? 'SVG Preview' : 'HTML Preview');
+
+  const frame = (
+    mode === 'preview' ? (
+      <iframe
+        title={`${lang} preview`}
+        srcDoc={srcDoc}
+        sandbox="allow-scripts"
+      />
+    ) : (
+      <pre className="preview-source"><code>{code}</code></pre>
+    )
+  );
+
+  return (
+    <div className={`html-preview html-preview-v2 ${open ? 'open' : ''}`} onPointerDown={(event) => event.stopPropagation()}>
+      {!open ? (
+        <button className="preview-toggle" type="button" onClick={() => setOpen(true)}>
+          <Eye size={15} />
+          Preview
+        </button>
+      ) : (
+        <>
+          <div className="preview-toolbar">
+            <strong>{label}</strong>
+            <span />
+            <button className="preview-mode-button" type="button" onClick={() => setMode((current) => (current === 'preview' ? 'source' : 'preview'))}>
+              {mode === 'preview' ? 'Source' : 'Preview'}
+            </button>
+            <button type="button" onClick={() => setFullscreen(true)} aria-label="Fullscreen preview"><Maximize2 size={15} /></button>
+            <button type="button" onClick={() => setOpen(false)} aria-label="Close preview"><X size={15} /></button>
+          </div>
+          <div className="preview-frame">{frame}</div>
+        </>
+      )}
+      {fullscreen && (
+        <div className="preview-fullscreen" onClick={() => setFullscreen(false)}>
+          <div className="preview-fullscreen-bar" onClick={(event) => event.stopPropagation()}>
+            <strong>{label}</strong>
+            <div className="preview-fullscreen-actions">
+              <button type="button" onClick={() => setMode((current) => (current === 'preview' ? 'source' : 'preview'))}>
+                {mode === 'preview' ? 'Source' : 'Preview'}
+              </button>
+              <button type="button" onClick={() => setFullscreen(false)}>Exit</button>
+            </div>
+          </div>
+          <div className="preview-fullscreen-body" onClick={(event) => event.stopPropagation()}>
+            {mode === 'preview' ? (
+              <iframe
+                title={`${lang} fullscreen preview`}
+                srcDoc={srcDoc}
+                sandbox="allow-scripts"
+              />
+            ) : (
+              <pre className="preview-source fullscreen"><code>{code}</code></pre>
+            )}
+          </div>
         </div>
       )}
     </div>
