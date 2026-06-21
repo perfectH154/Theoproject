@@ -427,15 +427,27 @@ function looksLikeHtmlDocument(text) {
   const value = String(text || '').trim();
   if (!value) return false;
   if (/```/.test(value)) return false;
-  if (/<!doctype\s+html/i.test(value)) return true;
-  if (/<html[\s>]/i.test(value)) return true;
-  if (/<head[\s>]/i.test(value) || /<body[\s>]/i.test(value)) return true;
-  if (/<style[\s>][\s\S]*<\/style>/i.test(value) || /<script[\s>][\s\S]*<\/script>/i.test(value)) return true;
-  const pairedTags = value.match(/<([a-z][a-z0-9-]*)\b[^>]*>[\s\S]*?<\/\1>/gi) || [];
-  const structuralTags = pairedTags.filter((tag) => (
-    /^<(div|section|article|main|header|footer|nav|button|form|canvas|svg|table|ul|ol|p|h[1-6])\b/i.test(tag)
-  ));
-  return structuralTags.length >= 1 && /[<>]/.test(value);
+  if (/^<\/[a-z][\w:-]*>/i.test(value)) return false;
+  if (!/^<(!doctype|html|head|body|svg|div|section|article|main|style|script|canvas|table|form|button)\b/i.test(value)) return false;
+  if (/^<!doctype\s+html/i.test(value) || /^<html[\s>]/i.test(value)) return true;
+  const paired = value.match(/^<([a-z][\w:-]*)\b[^>]*>[\s\S]*<\/\1>\s*$/i);
+  if (!paired) return false;
+  const allowed = new Set([
+    'head',
+    'body',
+    'svg',
+    'div',
+    'section',
+    'article',
+    'main',
+    'style',
+    'script',
+    'canvas',
+    'table',
+    'form',
+    'button'
+  ]);
+  return allowed.has(paired[1].toLowerCase());
 }
 
 function extractInlineHtmlPreview(content) {
@@ -2353,7 +2365,8 @@ function Message({
 function MessageContent({ content }) {
   const parts = parseFencedContent(content);
   const fencedHtml = extractHtmlFromFences(content);
-  const inlineHtml = fencedHtml.length ? null : extractInlineHtmlPreview(content);
+  const hasFence = /```/.test(String(content || ''));
+  const inlineHtml = hasFence ? null : extractInlineHtmlPreview(content);
   return (
     <div className="message-content">
       {parts.map((part, index) => {

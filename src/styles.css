@@ -675,6 +675,17 @@ button {
   background: #fff7f9;
 }
 
+@media (max-width: 640px) {
+  .preview-frame {
+    height: min(320px, 45vh);
+    min-height: 180px;
+  }
+
+  .preview-source {
+    max-height: min(320px, 45vh);
+  }
+}
+
 .typing-bubble {
   display: inline-flex;
   align-items: center;
