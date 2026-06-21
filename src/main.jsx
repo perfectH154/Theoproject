@@ -428,10 +428,11 @@ function looksLikeHtmlDocument(text) {
   if (!value) return false;
   if (/```/.test(value)) return false;
   if (/^<\/[a-z][\w:-]*>/i.test(value)) return false;
-  if (!/^<(!doctype|html|head|body|svg|div|section|article|main|style|script|canvas|table|form|button)\b/i.test(value)) return false;
+  if (!/^<(!doctype|html|head|body|svg|div|section|article|main|style|script|canvas|table|form|button|details|summary)\b/i.test(value)) return false;
   if (/^<!doctype\s+html/i.test(value) || /^<html[\s>]/i.test(value)) return true;
-  const paired = value.match(/^<([a-z][\w:-]*)\b[^>]*>[\s\S]*<\/\1>\s*$/i);
-  if (!paired) return false;
+  const root = value.match(/^<([a-z][\w:-]*)\b[^>]*>/i);
+  if (!root) return false;
+  const rootTag = root[1].toLowerCase();
   const allowed = new Set([
     'head',
     'body',
@@ -445,9 +446,12 @@ function looksLikeHtmlDocument(text) {
     'canvas',
     'table',
     'form',
-    'button'
+    'button',
+    'details',
+    'summary'
   ]);
-  return allowed.has(paired[1].toLowerCase());
+  if (!allowed.has(rootTag)) return false;
+  return new RegExp(`</${rootTag}\\s*>\\s*$`, 'i').test(value);
 }
 
 function extractInlineHtmlPreview(content) {
@@ -462,17 +466,25 @@ function extractInlineHtmlPreview(content) {
 function previewSrcDoc(lang, code) {
   const source = String(code || '');
   if (lang === 'svg') {
-    return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;min-height:100%;display:grid;place-items:center;background:#fff7f9;color:#5f4b50}svg{max-width:100%;height:auto}</style></head><body>${source}</body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>html,body{margin:0;min-height:100%;display:grid;place-items:center;background:#fff7f9;color:#5f4b50}svg{max-width:100%;height:auto}</style></head><body>${source}</body></html>`;
   }
-  if (/<!doctype\s+html/i.test(source) || /<html[\s>]/i.test(source)) return source;
+  if (/<!doctype\s+html/i.test(source) || /<html[\s>]/i.test(source)) {
+    const withMeta = /<meta\s+charset=/i.test(source)
+      ? source
+      : source.replace(/<head([^>]*)>/i, '<head$1><meta charset="utf-8" />');
+    return /<base\s+/i.test(withMeta)
+      ? withMeta
+      : withMeta.replace(/<head([^>]*)>/i, '<head$1><base target="_blank" />');
+  }
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
+  <base target="_blank" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    html, body { margin: 0; min-height: 100%; background: #fff7f9; color: #5C4033; }
-    body { font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+    html, body { margin: 0; padding: 0; min-height: 100%; background: #fff7f9; color: #5C4033; }
+    body { font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; overflow: auto; }
     * { box-sizing: border-box; }
   </style>
 </head>

@@ -586,12 +586,14 @@ button {
 .preview-frame {
   height: 360px;
   min-height: 220px;
+  overflow: hidden;
   background: #fff7f9;
 }
 
 .html-preview-v2 iframe,
 .preview-frame iframe {
   height: 100%;
+  min-height: 0;
 }
 
 .html-preview iframe {
