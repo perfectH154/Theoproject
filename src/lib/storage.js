@@ -5,6 +5,7 @@ const defaults = {
   model: '',
   showThinking: true,
   typingSpeed: 'normal',
+  theme: 'system',
   sessionId: 'default',
   conversationId: 'default',
   portraitUrl: '',

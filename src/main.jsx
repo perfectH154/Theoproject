@@ -1076,6 +1076,19 @@ function enableAssistantTypewriter() {
   }
 }
 
+function resolveThemeChoice(choice = 'system') {
+  if (choice === 'light' || choice === 'dark') return choice;
+  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark';
+  return 'light';
+}
+
+function applyThemeChoice(choice = 'system') {
+  const safeChoice = choice === 'light' || choice === 'dark' || choice === 'system' ? choice : 'system';
+  const resolved = resolveThemeChoice(safeChoice);
+  document.documentElement.dataset.theme = resolved;
+  document.documentElement.dataset.themeChoice = safeChoice;
+}
+
 function App() {
   const [settings, setSettings] = useState(loadSettings);
   const [tab, setTab] = useState('chat');
@@ -1110,6 +1123,20 @@ function App() {
     settingsRef.current = settings;
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    const choice = settings.theme || 'system';
+    applyThemeChoice(choice);
+    if (choice !== 'system' || !window.matchMedia) return undefined;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => applyThemeChoice('system');
+    if (media.addEventListener) media.addEventListener('change', update);
+    else media.addListener?.(update);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', update);
+      else media.removeListener?.(update);
+    };
+  }, [settings.theme]);
 
   useEffect(() => {
     activeConversationRef.current = activeConversationId;
@@ -4280,6 +4307,21 @@ function SettingsSheet({ settings, setSettings, close }) {
           Token
           <input value={settings.token} onChange={(e) => setSettings({ ...settings, token: e.target.value })} type="password" />
         </label>
+        <div className="settings-theme-card">
+          <strong>Theme</strong>
+          <div className="theme-segmented" role="group" aria-label="Theme">
+            {['system', 'light', 'dark'].map((theme) => (
+              <button
+                key={theme}
+                type="button"
+                className={(settings.theme || 'system') === theme ? 'active' : ''}
+                onClick={() => setSettings({ ...settings, theme })}
+              >
+                {theme === 'system' ? 'System' : theme === 'light' ? 'Light' : 'Dark'}
+              </button>
+            ))}
+          </div>
+        </div>
         <label>
           主通道模型
           <select
